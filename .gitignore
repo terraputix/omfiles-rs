@@ -1,0 +1,6 @@
+target/
+writetest.om
+writetest_fpx.om
+benchmark.om
+*.om
+lcov.info
