@@ -240,8 +240,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let n_chunks = self.dimensions.n_chunks();
 
         let compressed_data_buffer = &buffer[compressed_data_start_offset..];
-        // let compressed_data_start_ptr =
-        //     unsafe { buffer.as_ptr().add(compressed_data_start_offset) as *mut u8 };
 
         for c0 in divide_range(&dim0_read, self.dimensions.chunk0) {
             let c1_range = divide_range(&dim1_read, self.dimensions.chunk1);

@@ -342,7 +342,6 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                     },
                     delta2d_encode,
                     |uncompressed, length, compressed_out| {
-                        println!("pico");
                         let compressed =
                             simpler_compress(&uncompressed[..length], DEFAULT_COMPRESSION_LEVEL)
                                 .expect("Error during Pico compression");
