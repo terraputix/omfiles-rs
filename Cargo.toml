@@ -7,6 +7,9 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-feature=+bmi1,+bmi2,+avx2"]
+
 [[bin]]
 name = "testread"
 path = "src/testread.rs"
@@ -23,6 +26,7 @@ path = "src/testread.rs"
 
 [dependencies]
 memmap2 = "0.9.4"
+pco = "0.3.1"
 turbo_pfor_om = { git = "https://github.com/terraputix/turbopfor-om-rs.git", branch = "main" }
 # turbo_pfor_sys = "0.1.3"
 

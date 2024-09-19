@@ -5,6 +5,7 @@ pub enum CompressionType {
     P4nzdec256 = 0,
     Fpxdec32 = 1,
     P4nzdec256logarithmic = 3,
+    Pico = 4,
 }
 
 impl CompressionType {
@@ -12,6 +13,7 @@ impl CompressionType {
         match self {
             CompressionType::P4nzdec256 | CompressionType::P4nzdec256logarithmic => 2,
             CompressionType::Fpxdec32 => 4,
+            CompressionType::Pico => 4,
         }
     }
 }
@@ -24,6 +26,7 @@ impl TryFrom<u8> for CompressionType {
             0 => Ok(CompressionType::P4nzdec256),
             1 => Ok(CompressionType::Fpxdec32),
             3 => Ok(CompressionType::P4nzdec256logarithmic),
+            4 => Ok(CompressionType::Pico),
             _ => Err(OmFilesRsError::InvalidCompressionType),
         }
     }

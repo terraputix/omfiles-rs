@@ -9,6 +9,7 @@ use crate::utils::divide_rounded_up;
 use std::fs::File;
 use std::path::Path;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
+use pco::standalone::simpler_compress;
 use turbo_pfor_om::{fpxenc32, p4nzenc128v16};
 
 /// Writer for OM files.
@@ -295,14 +296,18 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                         }
                     },
                     delta2d_encode,
-                    |a0, a1, a2| unsafe { p4nzenc128v16(a0, a1, a2) },
+                    |a0, a1, a2| unsafe {
+                        p4nzenc128v16(a0.as_mut_ptr() as *mut u16, a1, a2.as_mut_ptr())
+                    },
                 )
             }
-            CompressionType::Fpxdec32 => self.write_compressed::<f32, u32, _, _, _>(
+            CompressionType::Fpxdec32 => self.write_compressed::<f32, _, _, _>(
                 uncompressed_input,
                 |val| *val,
                 delta2d_encode_xor,
-                |a0, a1, a2| unsafe { fpxenc32(a0, a1, a2, 0) },
+                |a0, a1, a2| unsafe {
+                    fpxenc32(a0.as_mut_ptr() as *mut u32, a1, a2.as_mut_ptr(), 0)
+                },
             ),
             CompressionType::P4nzdec256logarithmic => {
                 let scalefactor = self.scalefactor;
@@ -317,13 +322,33 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                         }
                     },
                     delta2d_encode,
-                    |a0, a1, a2| unsafe { p4nzenc128v16(a0, a1, a2) },
+                    |a0, a1, a2| unsafe {
+                        p4nzenc128v16(a0.as_mut_ptr() as *mut u16, a1, a2.as_mut_ptr())
+                    },
                 )
             }
+            CompressionType::Pico => {
+                unimplemented!()
+            } // CompressionType::Pico => {
+              //     let scalefactor = self.scalefactor;
+              //     self.write_compressed(
+              //         uncompressed_input,
+              //         |val| {
+              //             if val.is_nan() {
+              //                 i16::MAX
+              //             } else {
+              //                 let scaled = val * scalefactor;
+              //                 scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
+              //             }
+              //         },
+              //         delta2d_encode,
+              //         |a0, a1, a2| simpler_compress(nums, compression_level),
+              //     )
+              // }
         }
     }
 
-    pub fn write_compressed<T, U, F, G, H>(
+    pub fn write_compressed<T, F, G, H>(
         &mut self,
         uncompressed_input: &[f32],
         scaler_conversion: H,
@@ -331,7 +356,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         compression_function: F,
     ) -> Result<(), OmFilesRsError>
     where
-        F: Fn(*mut U, usize, *mut u8) -> usize,
+        F: Fn(&mut [T], usize, &mut [u8]) -> usize,
         G: Fn(usize, usize, &mut [T]),
         H: Fn(&f32) -> T,
     {
@@ -387,16 +412,14 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                 }
                 delta2d_encode_function(length0, length1, &mut buffer);
 
-                let write_length = unsafe {
-                    // encoding functions have the following form
-                    // size_t compressed_size = encode( unsigned *in, size_t n, char *out)
-                    // compressed_size : number of bytes written into compressed output buffer out
-                    compression_function(
-                        buffer.as_mut_ptr() as *mut U,
-                        length1 * length0,
-                        self.write_buffer.as_mut_ptr().add(self.write_buffer_pos),
-                    )
-                };
+                // encoding functions have the following form
+                // size_t compressed_size = encode( unsigned *in, size_t n, char *out)
+                // compressed_size : number of bytes written into compressed output buffer out
+                let write_length = compression_function(
+                    buffer,
+                    length1 * length0,
+                    self.write_buffer[self.write_buffer_pos..].as_mut(),
+                );
 
                 // If the write_buffer is too full, write it to the backend
                 // Too full means, that the next compressed chunk may not fit into the buffer
