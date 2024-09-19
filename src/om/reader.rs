@@ -195,7 +195,10 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                             .expect("Could not decompress");
                         in_arr.len()
                     },
-                    delta2d_decode,
+                    // delta2d_decode_xor,
+                    |_a0, _a1, _a2| {
+                        // no op for pico
+                    },
                     |val| {
                         if val == i16::MAX {
                             f32::NAN

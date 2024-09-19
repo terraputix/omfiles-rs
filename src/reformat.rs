@@ -5,6 +5,8 @@ use omfiles_rs::om::writer::OmFileWriter;
 use std::io::{self};
 
 fn main() -> io::Result<()> {
+    let control_range_dim0 = Some(10000..10001);
+    let control_range_dim1 = Some(0..100);
     // let args: Vec<String> = env::args().collect();
     // if args.len() != 3 {
     //     eprintln!(
@@ -16,8 +18,10 @@ fn main() -> io::Result<()> {
 
     // let input_file_path = &args[1];
     // let output_file_path = &args[2];
-    let input_file_path = "era5land_temp2m_chunk_951.om";
-    let output_file_path = "era5land_test_pico.om";
+    // let input_file_path = "era5land_temp2m_chunk_951.om";
+    // let output_file_path = "era5land_test_pico.om";
+    let input_file_path = "icond2_temp2m_chunk_3960.om";
+    let output_file_path = "icond2_test_pico.om";
 
     // Read data from the input OM file
     let reader = OmFileReader::from_file(input_file_path)
@@ -27,6 +31,11 @@ fn main() -> io::Result<()> {
     println!("dim1: {:}", reader.dimensions.dim1);
     println!("chunk0: {:}", reader.dimensions.chunk0);
     println!("chunk1: {:}", reader.dimensions.chunk1);
+    println!("scalefactor: {:}", reader.scalefactor);
+
+    let control_data_original = reader
+        .read_range(control_range_dim0.clone(), control_range_dim1.clone())
+        .expect("Failed to read defined data ranges");
 
     // read all data
     let data = reader
@@ -47,9 +56,20 @@ fn main() -> io::Result<()> {
             CompressionType::Pico,
             reader.scalefactor,
             &data,
-            false,
+            true,
         )
         .expect("Failed to write data to output file");
+
+    // read some data from the file to verify the output
+    let reader = OmFileReader::from_file(output_file_path)
+        .expect(format!("Failed to open file: {}", output_file_path).as_str());
+
+    let control_data_pico = reader
+        .read_range(control_range_dim0, control_range_dim1)
+        .expect("Failed to read defined data ranges");
+
+    println!("data from newly written file: {:?}", control_data_pico);
+    assert_eq!(control_data_original, control_data_pico, "Data mismatch");
 
     Ok(())
 }

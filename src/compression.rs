@@ -13,7 +13,7 @@ impl CompressionType {
         match self {
             CompressionType::P4nzdec256 | CompressionType::P4nzdec256logarithmic => 2,
             CompressionType::Fpxdec32 => 4,
-            CompressionType::Pico => 4,
+            CompressionType::Pico => 2,
         }
     }
 }

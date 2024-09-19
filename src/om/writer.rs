@@ -9,8 +9,8 @@ use crate::utils::divide_rounded_up;
 use std::fs::File;
 use std::path::Path;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
-use pco::standalone::simpler_compress;
-use pco::DEFAULT_COMPRESSION_LEVEL;
+use pco::standalone::simple_compress;
+use pco::ChunkConfig;
 use turbo_pfor_om::{fpxenc32, p4nzenc128v16};
 
 /// Writer for OM files.
@@ -286,7 +286,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         match self.compression {
             CompressionType::P4nzdec256 => {
                 let scalefactor = self.scalefactor;
-                self.write_compressed(
+                self.write_compressed::<i16, _, _, _>(
                     uncompressed_input,
                     |val| {
                         if val.is_nan() {
@@ -312,7 +312,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
             ),
             CompressionType::P4nzdec256logarithmic => {
                 let scalefactor = self.scalefactor;
-                self.write_compressed(
+                self.write_compressed::<i16, _, _, _>(
                     uncompressed_input,
                     |val| {
                         if val.is_nan() {
@@ -330,7 +330,8 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
             }
             CompressionType::Pico => {
                 let scalefactor = self.scalefactor;
-                self.write_compressed(
+                let chunk_config = ChunkConfig::default();
+                self.write_compressed::<i16, _, _, _>(
                     uncompressed_input,
                     |val| {
                         if val.is_nan() {
@@ -340,11 +341,13 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                             scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
                         }
                     },
-                    delta2d_encode,
+                    // delta2d_encode_xor,
+                    |_a0, _a1, _a2| {
+                        // no op for pico
+                    },
                     |uncompressed, length, compressed_out| {
-                        let compressed =
-                            simpler_compress(&uncompressed[..length], DEFAULT_COMPRESSION_LEVEL)
-                                .expect("Error during Pico compression");
+                        let compressed = simple_compress(&uncompressed[..length], &chunk_config)
+                            .expect("Error during Pico compression");
                         // write all compressed data into compressed_out
                         let compressed_length = compressed.len();
                         compressed_out[..compressed_length].clone_from_slice(&compressed);
