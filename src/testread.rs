@@ -18,6 +18,10 @@ fn main() -> io::Result<()> {
     let reader = OmFileReader::from_file(file_path)
         .expect(format!("Failed to open file: {}", file_path).as_str());
     println!("compression: {:?}", reader.compression);
+    println!("dim0: {:}", reader.dimensions.dim0);
+    println!("dim1: {:}", reader.dimensions.dim1);
+    println!("chunk0: {:}", reader.dimensions.chunk0);
+    println!("chunk1: {:}", reader.dimensions.chunk1);
 
     let data = reader
         .read_range(dim0_range, dim1_range)
