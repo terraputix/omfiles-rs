@@ -39,7 +39,7 @@ pub fn benchmark_in_memory(c: &mut Criterion) {
             for _i in 0..iters {
                 black_box(
                     OmFileWriter::new(DIM0_SIZE, DIM1_SIZE, CHUNK0_SIZE, CHUNK1_SIZE)
-                        .write_all_in_memory(CompressionType::Fpxdec32, 0.1, &data)
+                        .write_all_in_memory(CompressionType::P4nzdec256, 1f32, &data)
                         .unwrap(),
                 );
             }
