@@ -14,6 +14,10 @@ rustflags = ["-C", "target-feature=+bmi1,+bmi2,+avx2"]
 name = "testread"
 path = "src/testread.rs"
 
+[[bin]]
+name = "reformat"
+path = "src/reformat.rs"
+
 # some optimizations for binary/library size in release builds
 # compare: https://github.com/johnthagen/min-sized-rust
 # [profile.release]
