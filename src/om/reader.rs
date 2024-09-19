@@ -182,7 +182,28 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                 )
             }
             CompressionType::Pico => {
-                unimplemented!();
+                let chunk_buffer = as_typed_slice_mut::<i16, u8>(chunk_buffer);
+                self.read_compressed(
+                    into,
+                    array_dim1_range,
+                    array_dim1_length,
+                    chunk_buffer,
+                    dim0_read,
+                    dim1_read,
+                    |in_arr, _length, out_arr| {
+                        pco::standalone::simple_decompress_into(in_arr, out_arr)
+                            .expect("Could not decompress");
+                        in_arr.len()
+                    },
+                    delta2d_decode,
+                    |val| {
+                        if val == i16::MAX {
+                            f32::NAN
+                        } else {
+                            val as f32 / self.scalefactor
+                        }
+                    },
+                )
             }
         }
     }
@@ -271,7 +292,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                 // size_t compressed_size = decode( char *in, size_t n, unsigned *out)
                 // compressed_size : number of bytes read from compressed input buffer in
                 let compressed_bytes = decompression_function(
-                    &compressed_data_buffer[start_pos..],
+                    &compressed_data_buffer[start_pos..start_pos + length_compressed_bytes],
                     length0 * length1,
                     chunk_buffer,
                 );

@@ -10,6 +10,7 @@ use std::fs::File;
 use std::path::Path;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
 use pco::standalone::simpler_compress;
+use pco::DEFAULT_COMPRESSION_LEVEL;
 use turbo_pfor_om::{fpxenc32, p4nzenc128v16};
 
 /// Writer for OM files.
@@ -328,23 +329,30 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                 )
             }
             CompressionType::Pico => {
-                unimplemented!()
-            } // CompressionType::Pico => {
-              //     let scalefactor = self.scalefactor;
-              //     self.write_compressed(
-              //         uncompressed_input,
-              //         |val| {
-              //             if val.is_nan() {
-              //                 i16::MAX
-              //             } else {
-              //                 let scaled = val * scalefactor;
-              //                 scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
-              //             }
-              //         },
-              //         delta2d_encode,
-              //         |a0, a1, a2| simpler_compress(nums, compression_level),
-              //     )
-              // }
+                let scalefactor = self.scalefactor;
+                self.write_compressed(
+                    uncompressed_input,
+                    |val| {
+                        if val.is_nan() {
+                            i16::MAX
+                        } else {
+                            let scaled = val * scalefactor;
+                            scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
+                        }
+                    },
+                    delta2d_encode,
+                    |uncompressed, length, compressed_out| {
+                        println!("pico");
+                        let compressed =
+                            simpler_compress(&uncompressed[..length], DEFAULT_COMPRESSION_LEVEL)
+                                .expect("Error during Pico compression");
+                        // write all compressed data into compressed_out
+                        let compressed_length = compressed.len();
+                        compressed_out[..compressed_length].clone_from_slice(&compressed);
+                        compressed.len()
+                    },
+                )
+            }
         }
     }
 
@@ -562,6 +570,30 @@ mod tests {
         )?;
 
         assert_eq!(compressed.count(), 236);
+
+        let uncompressed = OmFileReader::new(compressed)
+            .expect("Could not get data from backend")
+            .read_all()?;
+
+        assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_in_memory_pico_compression() -> Result<(), Box<dyn std::error::Error>> {
+        let data: Vec<f32> = vec![
+            0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0,
+            66.0, 17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+        ];
+        let must_equal = data.clone();
+        let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
+            CompressionType::Pico,
+            1.0,
+            &data,
+        )?;
+
+        assert_eq!(compressed.count(), 264);
 
         let uncompressed = OmFileReader::new(compressed)
             .expect("Could not get data from backend")
