@@ -270,8 +270,8 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         let chunk_offset_bytes = as_bytes(self.chunk_offset_bytes.as_slice());
 
         // pad to 64 byte alignment for safe conversion of &[u8] to &[usize]
-        let padding = 64 - (last_chunk_offset % 64);
-        let padding_data = vec![0; padding];
+        let padding = 8 - (last_chunk_offset % 8);
+        let padding_data = vec![0u8; padding];
         self.backend.write(&padding_data)?;
 
         // write chunk offset table
@@ -522,7 +522,7 @@ mod tests {
             &data,
         )?;
 
-        assert_eq!(compressed.count(), 256);
+        assert_eq!(compressed.count(), 216);
 
         let uncompressed = OmFileReader::new(compressed)
             .expect("Could not get data from backend")
@@ -546,7 +546,7 @@ mod tests {
             &data,
         )?;
 
-        assert_eq!(compressed.count(), 256);
+        assert_eq!(compressed.count(), 240);
 
         let uncompressed = OmFileReader::new(compressed)
             .expect("Could not get data from backend")
