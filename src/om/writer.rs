@@ -301,7 +301,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
     fn compress_chunk_offsets(&mut self) -> Vec<u8> {
         let chunked_into = 64;
         let mut buffer =
-            AlignToSixtyFour::new(p4nenc256_bound(self.chunk_offset_bytes.len() * 8, 4));
+            AlignToSixtyFour::new(p4nenc256_bound(self.chunk_offset_bytes.len() * 8, 8));
         let buffer = buffer.as_mut_slice();
         println!("buffer len: {}", buffer.len());
         let mut buffer_pos = 0;
