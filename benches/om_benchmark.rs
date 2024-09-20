@@ -108,9 +108,9 @@ pub fn benchmark_read(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    // benchmark_in_memory,
+    benchmark_in_memory,
     benchmark_write,
-    // benchmark_read
+    benchmark_read
 );
 criterion_main!(benches);
 
