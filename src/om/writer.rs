@@ -248,11 +248,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         let header_bytes = header.as_bytes();
         self.backend.write(header_bytes.as_slice())?;
 
-        // write empty chunk offset table
-        // TODO: Wouldn't using usize make some problems if files are shared between 32 and 64 bit systems?
-        let zero_bytes = vec![0; self.dimensions.chunk_offset_length()];
-        self.backend.write(&zero_bytes)?;
-
+        // the lut table is in the footer now!
         Ok(())
     }
 
@@ -266,12 +262,20 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         let trailing_data = vec![0; trailing_bytes];
         self.backend.write(&trailing_data)?;
 
+        // we need to know the last chunk offset in order to be able to
+        // properly align the data of the LUT to be able to safely convert
+        // &[u8] to &[usize]
+        let last_chunk_offset = *self.chunk_offset_bytes.last().unwrap_or(&0);
+
         let chunk_offset_bytes = as_bytes(self.chunk_offset_bytes.as_slice());
 
-        // write chunk_offsets dictionary after the header,
-        // we initially wrote zeros in these places!
-        self.backend
-            .write_at(chunk_offset_bytes, OmHeader::LENGTH)?;
+        // pad to 64 byte alignment for safe conversion of &[u8] to &[usize]
+        let padding = 64 - (last_chunk_offset % 64);
+        let padding_data = vec![0; padding];
+        self.backend.write(&padding_data)?;
+
+        // write chunk offset table
+        self.backend.write(chunk_offset_bytes)?;
 
         if let Some(_fsync_flush_size) = self.fsync_flush_size {
             self.backend.synchronize()?;
@@ -518,7 +522,7 @@ mod tests {
             &data,
         )?;
 
-        assert_eq!(compressed.count(), 212);
+        assert_eq!(compressed.count(), 256);
 
         let uncompressed = OmFileReader::new(compressed)
             .expect("Could not get data from backend")
@@ -542,7 +546,7 @@ mod tests {
             &data,
         )?;
 
-        assert_eq!(compressed.count(), 236);
+        assert_eq!(compressed.count(), 256);
 
         let uncompressed = OmFileReader::new(compressed)
             .expect("Could not get data from backend")

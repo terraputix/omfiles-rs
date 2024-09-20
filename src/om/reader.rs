@@ -57,8 +57,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
         // Fetch chunk table
         let chunk_table_buffer = self.backend.get_bytes(
-            OmHeader::LENGTH,
-            self.dimensions.chunk_offset_length() + OmHeader::LENGTH,
+            self.backend.count() - self.dimensions.chunk_offset_length(),
+            self.dimensions.chunk_offset_length(),
         )?;
         let chunk_offsets = as_typed_slice::<usize>(chunk_table_buffer);
 
@@ -205,11 +205,14 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     {
         self.dimensions.check_read_ranges(&dim0_read, &dim1_read)?;
         let buffer = self.backend.get_bytes(0, self.backend.count())?;
-        let compressed_data_start_offset = OmHeader::LENGTH + self.dimensions.chunk_offset_length();
+        let compressed_data_start_offset = OmHeader::LENGTH;
 
         // Fetch chunk table
-        let chunk_offsets =
-            as_typed_slice::<usize>(&buffer[OmHeader::LENGTH..compressed_data_start_offset]);
+        let chunk_offsets = as_typed_slice::<usize>(
+            &buffer[self.backend.count() - self.dimensions.chunk_offset_length()..],
+        );
+
+        println!("Chunk offsets: {:?}", chunk_offsets);
 
         // let n_dim0_chunks = self.dimensions.n_dim0_chunks();
         let n_dim1_chunks = self.dimensions.n_dim1_chunks();

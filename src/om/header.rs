@@ -16,7 +16,7 @@ pub struct OmHeader {
 impl OmHeader {
     pub const MAGIC_NUMBER1: u8 = 79;
     pub const MAGIC_NUMBER2: u8 = 77;
-    pub const VERSION: u8 = 2;
+    pub const VERSION: u8 = 3;
     pub const LENGTH: usize = 40;
 
     /// Create a new OmHeader from a slice of bytes.
