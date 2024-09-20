@@ -17,7 +17,7 @@ pub fn delta2d_decode(length0: usize, length1: usize, chunk_buffer: &mut [i16]) 
             let index = d0 * length1 + d1;
             // Represents the index of the previous element in a 2D delta calculation.
             let prev_index = (d0 - 1) * length1 + d1;
-            chunk_buffer[index] += chunk_buffer[prev_index];
+            chunk_buffer[index] = chunk_buffer[index].wrapping_add(chunk_buffer[prev_index]);
         }
     }
 }
@@ -38,7 +38,7 @@ pub fn delta2d_encode(length0: usize, length1: usize, chunk_buffer: &mut [i16]) 
         for d1 in 0..length1 {
             let index = d0 * length1 + d1;
             let prev_index = (d0 - 1) * length1 + d1;
-            chunk_buffer[index] -= chunk_buffer[prev_index];
+            chunk_buffer[index] = chunk_buffer[index].wrapping_sub(chunk_buffer[prev_index]);
         }
     }
 }
