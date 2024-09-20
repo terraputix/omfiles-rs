@@ -130,7 +130,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                     chunk_buffer,
                     dim0_read,
                     dim1_read,
-                    |a0, a1, a2| unsafe { p4nzdec128v16(a0, a1, a2) },
+                    |a0, a1, a2| unsafe {
+                        p4nzdec128v16(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u16)
+                    },
                     delta2d_decode,
                     |val| {
                         if val == i16::MAX {
@@ -150,7 +152,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                     chunk_buffer,
                     dim0_read,
                     dim1_read,
-                    |a0, a1, a2| unsafe { fpxdec32(a0, a1, a2, 0) },
+                    |a0, a1, a2| unsafe {
+                        fpxdec32(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u32, 0)
+                    },
                     delta2d_decode_xor,
                     |val| val,
                 )
@@ -164,7 +168,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                     chunk_buffer,
                     dim0_read,
                     dim1_read,
-                    |a0, a1, a2| unsafe { p4nzdec128v16(a0, a1, a2) },
+                    |a0, a1, a2| unsafe {
+                        p4nzdec128v16(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u16)
+                    },
                     delta2d_decode,
                     |val| {
                         if val == i16::MAX {
@@ -179,7 +185,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     }
 
     #[inline(always)]
-    pub fn read_compressed<T, U, F, G, H>(
+    pub fn read_compressed<T, F, G, H>(
         &self,
         into: &mut [f32],
         array_dim1_range: Range<usize>,
@@ -193,7 +199,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     ) -> Result<(), OmFilesRsError>
     where
         T: Copy + Clone,
-        F: Fn(*mut u8, usize, *mut U) -> usize,
+        F: Fn(&[u8], usize, &mut [T]) -> usize,
         G: Fn(usize, usize, &mut [T]),
         H: Fn(T) -> f32,
     {
@@ -209,8 +215,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let n_dim1_chunks = self.dimensions.n_dim1_chunks();
         let n_chunks = self.dimensions.n_chunks();
 
-        let compressed_data_start_ptr =
-            unsafe { buffer.as_ptr().add(compressed_data_start_offset) as *mut u8 };
+        let compressed_data_buffer = &buffer[compressed_data_start_offset..];
 
         for c0 in divide_range(&dim0_read, self.dimensions.chunk0) {
             let c1_range = divide_range(&dim1_read, self.dimensions.chunk1);
@@ -257,16 +262,14 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                     length_compressed_bytes,
                 )?;
 
-                let compressed_bytes = unsafe {
-                    // decompression is a function like
-                    // size_t compressed_size = decode( char *in, size_t n, unsigned *out)
-                    // compressed_size : number of bytes read from compressed input buffer in
-                    decompression_function(
-                        compressed_data_start_ptr.add(start_pos),
-                        length0 * length1,
-                        chunk_buffer.as_mut_ptr() as *mut U,
-                    )
-                };
+                // decompression is a function like
+                // size_t compressed_size = decode( char *in, size_t n, unsigned *out)
+                // compressed_size : number of bytes read from compressed input buffer in
+                let compressed_bytes = decompression_function(
+                    &compressed_data_buffer[start_pos..start_pos + length_compressed_bytes],
+                    length0 * length1,
+                    chunk_buffer,
+                );
 
                 assert_eq!(
                     compressed_bytes, length_compressed_bytes,
