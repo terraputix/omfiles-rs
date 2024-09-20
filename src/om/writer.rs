@@ -1,4 +1,4 @@
-use crate::aligned_buffer::{as_bytes, as_typed_slice_mut, AlignToSixtyFour};
+use crate::aligned_buffer::{as_bytes, as_typed_slice, as_typed_slice_mut, AlignToSixtyFour};
 use crate::compression::{p4nenc256_bound, CompressionType};
 use crate::delta2d::{delta2d_encode, delta2d_encode_xor};
 use crate::om::backends::{InMemoryBackend, OmFileWriterBackend};
@@ -9,7 +9,7 @@ use crate::utils::divide_rounded_up;
 use std::fs::File;
 use std::path::Path;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
-use turbo_pfor_om::{fpxenc32, p4nzenc128v16};
+use turbo_pfor_om::{fpxenc32, p4ndenc64, p4nzenc128v16};
 
 /// Writer for OM files.
 /// The format currently looks like this:
@@ -248,11 +248,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         let header_bytes = header.as_bytes();
         self.backend.write(header_bytes.as_slice())?;
 
-        // write empty chunk offset table
-        // TODO: Wouldn't using usize make some problems if files are shared between 32 and 64 bit systems?
-        let zero_bytes = vec![0; self.dimensions.chunk_offset_length()];
-        self.backend.write(&zero_bytes)?;
-
+        // the lut table is in the footer now!
         Ok(())
     }
 
@@ -266,18 +262,66 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         let trailing_data = vec![0; trailing_bytes];
         self.backend.write(&trailing_data)?;
 
-        let chunk_offset_bytes = as_bytes(self.chunk_offset_bytes.as_slice());
+        // we need to know the last chunk offset in order to be able to
+        // properly align the data of the LUT to be able to safely convert
+        // &[u8] to &[usize]
+        let last_chunk_offset = *self.chunk_offset_bytes.last().unwrap_or(&0);
 
-        // write chunk_offsets dictionary after the header,
-        // we initially wrote zeros in these places!
+        // pad to 64 byte alignment for safe conversion of &[u8] to &[usize]
+        let padding = 8 - (last_chunk_offset % 8);
+        let padding_data = vec![0u8; padding];
+        self.backend.write(&padding_data)?;
+
+        // write chunk offset table
+        // self.backend.write(chunk_offset_bytes)?;
+
+        println!("Trying to compress chunk offsets");
+        let compressed_chunk_offsets = self.compress_chunk_offsets();
+        println!(
+            "Compressed chunk offsets from {} to {} bytes",
+            self.chunk_offset_bytes.len() * 8,
+            compressed_chunk_offsets.len()
+        );
+
+        self.backend.write(&compressed_chunk_offsets)?;
+
+        // at the very end we will write compressed and uncompressed size of the LUT
+        let length_compressed = compressed_chunk_offsets.len().to_le_bytes();
+        self.backend.write(&length_compressed)?;
         self.backend
-            .write_at(chunk_offset_bytes, OmHeader::LENGTH)?;
+            .write(&(self.chunk_offset_bytes.len() * 8).to_le_bytes())?;
 
         if let Some(_fsync_flush_size) = self.fsync_flush_size {
             self.backend.synchronize()?;
         }
 
         Ok(())
+    }
+
+    fn compress_chunk_offsets(&mut self) -> Vec<u8> {
+        let chunked_into = 64;
+        let mut buffer =
+            AlignToSixtyFour::new(p4nenc256_bound(self.chunk_offset_bytes.len() * 8, 8));
+        let buffer = buffer.as_mut_slice();
+        println!("buffer len: {}", buffer.len());
+        let mut buffer_pos = 0;
+
+        let chunk_offset_bytes = self.chunk_offset_bytes.as_mut_slice();
+
+        chunk_offset_bytes
+            .chunks_mut(chunked_into)
+            .for_each(|chunk| {
+                buffer_pos += unsafe {
+                    let compressed_size = p4ndenc64(
+                        chunk.as_mut_ptr() as *mut u64,
+                        std::cmp::min(chunked_into, chunk.len()),
+                        buffer[buffer_pos..].as_mut_ptr(),
+                    );
+                    println!("compressed_size: {}", compressed_size);
+                    compressed_size
+                };
+            });
+        buffer[..buffer_pos].to_vec()
     }
 
     pub fn write(&mut self, uncompressed_input: &[f32]) -> Result<(), OmFilesRsError> {
@@ -518,7 +562,7 @@ mod tests {
             &data,
         )?;
 
-        assert_eq!(compressed.count(), 212);
+        assert_eq!(compressed.count(), 211);
 
         let uncompressed = OmFileReader::new(compressed)
             .expect("Could not get data from backend")
