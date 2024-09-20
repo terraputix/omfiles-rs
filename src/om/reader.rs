@@ -10,7 +10,7 @@ use crate::utils::{add_range, clamp_range, divide_range, subtract_range};
 use std::fs::File;
 use std::ops::Range;
 // use turbo_pfor_sys::{fpxdec32, p4nzdec128v16};
-use turbo_pfor_om::{fpxdec32, p4nzdec128v16};
+use turbo_pfor_om::{fpxdec32, p4nddec64, p4nzdec128v16};
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub backend: Backend,
@@ -184,6 +184,42 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         }
     }
 
+    fn decompress_chunk_offsets(&self, compressed_data: &[u8], out_size: usize) -> Vec<usize> {
+        let chunked_into = 64;
+        let out_buffer_length = p4ndec256_bound(out_size, 8);
+        let mut buffer: Vec<usize> = vec![0usize; out_buffer_length];
+        let mut buffer_pos = 0;
+
+        let mut compressed_pos = 0;
+
+        while compressed_pos < compressed_data.len() {
+            let chunk = &mut buffer
+                [buffer_pos..std::cmp::min(buffer_pos + chunked_into, out_buffer_length)];
+            assert!(chunk.len() > 0);
+
+            let compressed_chunk = &compressed_data[compressed_pos..];
+
+            let decompressed_size = unsafe {
+                p4nddec64(
+                    compressed_chunk.as_ptr() as *mut u8,
+                    chunk.len(),
+                    chunk.as_mut_ptr() as *mut u64,
+                )
+            };
+
+            buffer_pos += chunk.len();
+            compressed_pos += decompressed_size;
+        }
+
+        println!(
+            "Decompressed chunk offsets from {} bytes to {} bytes",
+            compressed_data.len(),
+            buffer_pos * 8
+        );
+
+        buffer
+    }
+
     #[inline(always)]
     pub fn read_compressed<T, F, G, H>(
         &self,
@@ -207,12 +243,24 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let buffer = self.backend.get_bytes(0, self.backend.count())?;
         let compressed_data_start_offset = OmHeader::LENGTH;
 
-        // Fetch chunk table
-        let chunk_offsets = as_typed_slice::<usize>(
-            &buffer[self.backend.count() - self.dimensions.chunk_offset_length()..],
+        let chunk_offsets_decompressed_length =
+            usize::from_le_bytes(buffer[self.backend.count() - 8..].try_into().unwrap());
+
+        let chunk_offset_compressed_length = usize::from_le_bytes(
+            buffer[self.backend.count() - 16..self.backend.count() - 8]
+                .try_into()
+                .unwrap(),
         );
 
-        println!("Chunk offsets: {:?}", chunk_offsets);
+        // Fetch chunk table
+        let compressed_chunk_offsets = &buffer
+            [self.backend.count() - 16 - chunk_offset_compressed_length..self.backend.count() - 16];
+
+        let chunk_offsets = &self
+            .decompress_chunk_offsets(compressed_chunk_offsets, chunk_offsets_decompressed_length)
+            [0..chunk_offsets_decompressed_length];
+
+        // println!("Chunk offsets: {:?}", chunk_offsets);
 
         // let n_dim0_chunks = self.dimensions.n_dim0_chunks();
         let n_dim1_chunks = self.dimensions.n_dim1_chunks();
