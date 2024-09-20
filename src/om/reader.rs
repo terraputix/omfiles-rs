@@ -181,6 +181,33 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                     },
                 )
             }
+            CompressionType::Pico => {
+                let chunk_buffer = as_typed_slice_mut::<i16, u8>(chunk_buffer);
+                self.read_compressed(
+                    into,
+                    array_dim1_range,
+                    array_dim1_length,
+                    chunk_buffer,
+                    dim0_read,
+                    dim1_read,
+                    |in_arr, _length, out_arr| {
+                        pco::standalone::simple_decompress_into(in_arr, out_arr)
+                            .expect("Could not decompress");
+                        in_arr.len()
+                    },
+                    // delta2d_decode_xor,
+                    |_a0, _a1, _a2| {
+                        // no op for pico
+                    },
+                    |val| {
+                        if val == i16::MAX {
+                            f32::NAN
+                        } else {
+                            val as f32 / self.scalefactor
+                        }
+                    },
+                )
+            }
         }
     }
 
