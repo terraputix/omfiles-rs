@@ -21,10 +21,10 @@ fn main() -> io::Result<()> {
 
     // let input_file_path = &args[1];
     // let output_file_path = &args[2];
-    let input_file_path = "era5land_temp2m_chunk_951.om";
-    let output_file_path = "era5land_test_pico.om";
-    // let input_file_path = "icond2_temp2m_chunk_3960.om";
-    // let output_file_path = "icond2_test_pico.om";
+    // let input_file_path = "era5land_temp2m_chunk_951.om";
+    // let output_file_path = "era5land_test_pico.om";
+    let input_file_path = "era5_temp2m_year_2021.om";
+    let output_file_path = "era5_rusty.om";
 
     // Read data from the input OM file
     let reader = OmFileReader::from_file(input_file_path)
