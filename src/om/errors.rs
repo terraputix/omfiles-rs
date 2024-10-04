@@ -25,7 +25,10 @@ pub enum OmFilesRsError {
         errno: i32,
         error: String,
     },
-    ChunkHasWrongNumberOfElements,
+    ChunkHasWrongNumberOfElements {
+        expected: usize,
+        have: usize,
+    },
     DimensionOutOfBounds {
         range: std::ops::Range<usize>,
         allowed: usize,
@@ -98,8 +101,12 @@ impl std::fmt::Display for OmFilesRsError {
                     from, to, errno, error
                 )
             }
-            OmFilesRsError::ChunkHasWrongNumberOfElements => {
-                write!(f, "Chunk has wrong number of elements")
+            OmFilesRsError::ChunkHasWrongNumberOfElements { expected, have } => {
+                write!(
+                    f,
+                    "Chunk has wrong number of elements: expected {}, have {}",
+                    expected, have
+                )
             }
             OmFilesRsError::DimensionOutOfBounds { range, allowed } => {
                 write!(

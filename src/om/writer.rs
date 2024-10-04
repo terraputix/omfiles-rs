@@ -8,6 +8,7 @@ use crate::om::header::OmHeader;
 use crate::utils::divide_rounded_up;
 use std::fs::File;
 use std::path::Path;
+use std::rc::Rc;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
 use pco::standalone::simple_compress;
 use pco::ChunkConfig;
@@ -59,7 +60,7 @@ impl OmFileWriter {
         compression_type: CompressionType,
         scalefactor: f32,
         fsync: bool,
-        supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
+        supply_chunk: impl Fn(usize) -> Result<Rc<Vec<f32>>, OmFilesRsError>,
     ) -> Result<(), OmFilesRsError> {
         let mut state = OmFileWriterState::new(
             backend,
@@ -75,7 +76,7 @@ impl OmFileWriter {
         state.write_header()?;
         while state.c0 < state.dimensions.n_dim0_chunks() {
             let uncompressed_input = supply_chunk(state.c0 * state.dimensions.chunk0)?;
-            state.write(uncompressed_input)?;
+            state.write(&uncompressed_input)?;
         }
         state.write_tail()?;
 
@@ -88,7 +89,7 @@ impl OmFileWriter {
         compression_type: CompressionType,
         scalefactor: f32,
         overwrite: bool,
-        supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
+        supply_chunk: impl Fn(usize) -> Result<Rc<Vec<f32>>, OmFilesRsError>,
     ) -> Result<File, OmFilesRsError> {
         if !overwrite && Path::new(file).exists() {
             return Err(OmFilesRsError::FileExistsAlready {
@@ -129,17 +130,19 @@ impl OmFileWriter {
         file: &str,
         compression_type: CompressionType,
         scalefactor: f32,
-        all: &[f32],
+        all: Rc<Vec<f32>>,
         overwrite: bool,
     ) -> Result<File, OmFilesRsError> {
-        self.write_to_file(file, compression_type, scalefactor, overwrite, |_| Ok(all))
+        self.write_to_file(file, compression_type, scalefactor, overwrite, |_| {
+            Ok(all.clone())
+        })
     }
 
     pub fn write_in_memory<'a>(
         &self,
         compression_type: CompressionType,
         scalefactor: f32,
-        supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
+        supply_chunk: impl Fn(usize) -> Result<Rc<Vec<f32>>, OmFilesRsError>,
     ) -> Result<InMemoryBackend, OmFilesRsError> {
         let mut data = InMemoryBackend::new(Vec::new());
         self.write(&mut data, compression_type, scalefactor, true, supply_chunk)?;
@@ -150,9 +153,9 @@ impl OmFileWriter {
         &self,
         compression_type: CompressionType,
         scalefactor: f32,
-        all: &Vec<f32>,
+        all: Rc<Vec<f32>>,
     ) -> Result<InMemoryBackend, OmFilesRsError> {
-        self.write_in_memory(compression_type, scalefactor, |_| Ok(&all))
+        self.write_in_memory(compression_type, scalefactor, |_| Ok(all.clone()))
     }
 }
 
@@ -382,13 +385,19 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         if missing_elements < elements_per_chunk_row {
             // For the last chunk, the number must match exactly
             if uncompressed_input.len() != missing_elements {
-                return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
+                return Err(OmFilesRsError::ChunkHasWrongNumberOfElements {
+                    expected: missing_elements,
+                    have: uncompressed_input.len(),
+                });
             }
         }
 
         let is_even_multiple_of_chunk_size = uncompressed_input.len() % elements_per_chunk_row == 0;
         if !is_even_multiple_of_chunk_size && uncompressed_input.len() != missing_elements {
-            return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
+            return Err(OmFilesRsError::ChunkHasWrongNumberOfElements {
+                expected: elements_per_chunk_row,
+                have: uncompressed_input.len(),
+            });
         }
 
         let n_read_chunks = divide_rounded_up(uncompressed_input.len(), elements_per_chunk_row);
@@ -519,11 +528,11 @@ mod tests {
 
     #[test]
     fn test_write_empty_array_throws() -> Result<(), Box<dyn std::error::Error>> {
-        let data: Vec<f32> = vec![];
+        let data: Rc<Vec<f32>> = Rc::new(vec![]);
         let compressed = OmFileWriter::new(0, 0, 0, 0).write_all_in_memory(
             CompressionType::P4nzdec256,
             1.0,
-            &data,
+            data,
         );
         // make sure there was an error and it is of the correct type
         assert!(compressed.is_err());
@@ -536,15 +545,15 @@ mod tests {
 
     #[test]
     fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
-        let data: Vec<f32> = vec![
+        let data: Rc<Vec<f32>> = Rc::new(vec![
             0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0,
             66.0, 17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
+        ]);
         let must_equal = data.clone();
         let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
             CompressionType::P4nzdec256,
             1.0,
-            &data,
+            data,
         )?;
 
         assert_eq!(compressed.count(), 212);
@@ -560,15 +569,15 @@ mod tests {
 
     #[test]
     fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
-        let data: Vec<f32> = vec![
+        let data: Rc<Vec<f32>> = Rc::new(vec![
             0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0,
             66.0, 17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
+        ]);
         let must_equal = data.clone();
         let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
             CompressionType::Fpxdec32,
             1.0,
-            &data,
+            data,
         )?;
 
         assert_eq!(compressed.count(), 236);
@@ -584,15 +593,15 @@ mod tests {
 
     #[test]
     fn test_in_memory_pico_compression() -> Result<(), Box<dyn std::error::Error>> {
-        let data: Vec<f32> = vec![
+        let data: Rc<Vec<f32>> = Rc::new(vec![
             0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0,
             66.0, 17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
+        ]);
         let must_equal = data.clone();
         let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
             CompressionType::Pico,
             1.0,
-            &data,
+            data,
         )?;
 
         assert_eq!(compressed.count(), 264);
@@ -611,9 +620,9 @@ mod tests {
         let file = "writetest_failing.om";
         remove_file_if_exists(file);
 
-        let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-        let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-        let result4 = Arc::new((20..30).map(|x| x as f32).collect::<Vec<f32>>());
+        let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+        let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+        let result4 = Rc::new((20..30).map(|x| x as f32).collect::<Vec<f32>>());
 
         // Attempt to write more data than expected and ensure it throws an error
         let result = OmFileWriter::new(5, 5, 2, 2).write_to_file(
@@ -622,9 +631,9 @@ mod tests {
             1.0,
             false,
             |dim0pos| match dim0pos {
-                0 => Ok(result0.as_slice()),
-                2 => Ok(result2.as_slice()),
-                4 => Ok(result4.as_slice()),
+                0 => Ok(result0.clone()),
+                2 => Ok(result2.clone()),
+                4 => Ok(result4.clone()),
                 _ => panic!("Not expected"),
             },
         );
@@ -632,7 +641,11 @@ mod tests {
         // Ensure that an error was thrown
         assert!(result.is_err());
         let err = result.err().unwrap();
-        assert_eq!(err, OmFilesRsError::ChunkHasWrongNumberOfElements);
+        // Ensure that the error is of the correct type
+        assert!(matches!(
+            err,
+            OmFilesRsError::ChunkHasWrongNumberOfElements { .. }
+        ));
 
         // Remove the temporary file if it exists
         let temp_file = format!("{}~", file);
@@ -646,14 +659,14 @@ mod tests {
         let file = "writetest_nan.om";
         remove_file_if_exists(file);
 
-        let data: Vec<f32> = (0..(5 * 5)).map(|_| f32::NAN).collect();
+        let data: Rc<Vec<f32>> = Rc::new((0..(5 * 5)).map(|_| f32::NAN).collect());
 
         OmFileWriter::new(5, 5, 5, 5).write_to_file(
             file,
             CompressionType::P4nzdec256,
             1.0,
             false,
-            |_| Ok(data.as_slice()),
+            |_| Ok(data.clone()),
         )?;
 
         let reader = OmFileReader::from_file(file)?;
@@ -674,9 +687,9 @@ mod tests {
         let file = "writetest.om";
         remove_file_if_exists(file);
 
-        let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-        let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-        let result4 = Arc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+        let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+        let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+        let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
         OmFileWriter::new(5, 5, 2, 2).write_to_file(
             file,
@@ -684,9 +697,9 @@ mod tests {
             1.0,
             false,
             |dim0pos| match dim0pos {
-                0 => Ok(result0.as_slice()),
-                2 => Ok(result2.as_slice()),
-                4 => Ok(result4.as_slice()),
+                0 => Ok(result0.clone()),
+                2 => Ok(result2.clone()),
+                4 => Ok(result4.clone()),
                 _ => panic!("Not expected"),
             },
         )?;
@@ -824,9 +837,9 @@ mod tests {
         let file = "writetest_fpx.om";
         remove_file_if_exists(file);
 
-        let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-        let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-        let result4 = Arc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+        let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+        let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+        let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
         OmFileWriter::new(5, 5, 2, 2).write_to_file(
             file,
@@ -834,9 +847,9 @@ mod tests {
             1.0,
             false,
             |dim0pos| match dim0pos {
-                0 => Ok(result0.as_slice()),
-                2 => Ok(result2.as_slice()),
-                4 => Ok(result4.as_slice()),
+                0 => Ok(result0.clone()),
+                2 => Ok(result2.clone()),
+                4 => Ok(result4.clone()),
                 _ => panic!("Not expected"),
             },
         )?;
