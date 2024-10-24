@@ -38,7 +38,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools",
  "lazy_static",
  "lazycell",
  "log",
@@ -166,7 +166,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "is-terminal",
- "itertools 0.10.5",
+ "itertools",
  "num-traits",
  "once_cell",
  "oorandom",
@@ -187,7 +187,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
- "itertools 0.10.5",
+ "itertools",
 ]
 
 [[package]]
@@ -300,15 +300,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -404,13 +395,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "omfileformatc-rs"
+version = "0.0.1"
+source = "git+https://github.com/terraputix/omfileformatc-rs?branch=main#649f79c214ab9a17ec060575a90c51ceb36fe01b"
+dependencies = [
+ "bindgen",
+ "libc",
+]
+
+[[package]]
 name = "omfiles-rs"
 version = "0.1.0"
 dependencies = [
  "criterion",
  "memmap2",
+ "omfileformatc-rs",
  "rand",
- "turbo_pfor_om",
+ "serde",
 ]
 
 [[package]]
@@ -660,15 +661,6 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "turbo_pfor_om"
-version = "0.0.1"
-source = "git+https://github.com/terraputix/turbopfor-om-rs.git?branch=main#01fd89acbe674f0b72af04a3facce89f56c5553c"
-dependencies = [
- "bindgen",
- "libc",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@ use crate::utils::divide_rounded_up;
 use std::fs::File;
 use std::path::Path;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
-use turbo_pfor_om::{fpxenc32, p4nzenc128v16};
+use omfileformatc_rs::{fpxenc32, p4nzenc128v16};
 
 /// Writer for OM files.
 /// The format currently looks like this:
@@ -433,7 +433,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
 #[cfg(test)]
 mod tests {
     // use turbo_pfor_sys::fpxdec32;
-    use turbo_pfor_om::fpxdec32;
+    use omfileformatc_rs::fpxdec32;
 
     use crate::{
         compression::p4ndec256_bound,

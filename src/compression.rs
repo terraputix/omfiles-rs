@@ -1,6 +1,7 @@
 use crate::om::errors::OmFilesRsError;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(u8)]
 pub enum CompressionType {
     P4nzdec256 = 0,
     Fpxdec32 = 1,
