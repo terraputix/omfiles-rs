@@ -10,7 +10,7 @@ use crate::utils::{add_range, clamp_range, divide_range, subtract_range};
 use std::fs::File;
 use std::ops::Range;
 // use turbo_pfor_sys::{fpxdec32, p4nzdec128v16};
-use turbo_pfor_om::{fpxdec32, p4nzdec128v16};
+use omfileformatc_rs::{fpxdec32, p4nzdec128v16};
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub backend: Backend,

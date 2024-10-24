@@ -404,13 +404,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "omfileformatc-rs"
+version = "0.0.1"
+source = "git+https://github.com/terraputix/omfileformatc-rs?branch=main#9768d3489308c090694bb7f4bab8b04072063dc5"
+dependencies = [
+ "bindgen",
+ "libc",
+]
+
+[[package]]
 name = "omfiles-rs"
 version = "0.1.0"
 dependencies = [
  "criterion",
  "memmap2",
+ "omfileformatc-rs",
  "rand",
- "turbo_pfor_om",
 ]
 
 [[package]]
@@ -660,15 +669,6 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "turbo_pfor_om"
-version = "0.0.1"
-source = "git+https://github.com/terraputix/turbopfor-om-rs.git?branch=main#01fd89acbe674f0b72af04a3facce89f56c5553c"
-dependencies = [
- "bindgen",
- "libc",
 ]
 
 [[package]]
