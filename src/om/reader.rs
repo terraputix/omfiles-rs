@@ -1,6 +1,5 @@
-use crate::aligned_buffer::{as_typed_slice, as_typed_slice_mut};
+use crate::aligned_buffer::as_typed_slice;
 use crate::compression::{p4ndec256_bound, CompressionType};
-use crate::delta2d::{delta2d_decode, delta2d_decode_xor};
 use crate::om::backends::OmFileReaderBackend;
 use crate::om::dimensions::Dimensions;
 use crate::om::errors::OmFilesRsError;
@@ -9,8 +8,11 @@ use crate::om::mmapfile::{MmapFile, Mode};
 use crate::utils::{add_range, clamp_range, divide_range, subtract_range};
 use std::fs::File;
 use std::ops::Range;
+use std::os::raw::c_uint;
 // use turbo_pfor_sys::{fpxdec32, p4nzdec128v16};
-use omfileformatc_rs::{fpxdec32, p4nzdec128v16};
+use omfileformatc_rs::{om_datatype_t_DATA_TYPE_FLOAT, om_decoder_init};
+
+use super::decoder::create_decoder;
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub backend: Backend,
@@ -120,69 +122,129 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         dim0_read: Range<usize>,
         dim1_read: Range<usize>,
     ) -> Result<(), OmFilesRsError> {
-        match self.compression {
-            CompressionType::P4nzdec256 => {
-                let chunk_buffer = as_typed_slice_mut::<i16, u8>(chunk_buffer);
-                self.read_compressed(
-                    into,
-                    array_dim1_range,
-                    array_dim1_length,
-                    chunk_buffer,
-                    dim0_read,
-                    dim1_read,
-                    |a0, a1, a2| unsafe {
-                        p4nzdec128v16(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u16)
-                    },
-                    delta2d_decode,
-                    |val| {
-                        if val == i16::MAX {
-                            f32::NAN
-                        } else {
-                            val as f32 / self.scalefactor
-                        }
-                    },
-                )
-            }
-            CompressionType::Fpxdec32 => {
-                let chunk_buffer = as_typed_slice_mut::<f32, u8>(chunk_buffer);
-                self.read_compressed(
-                    into,
-                    array_dim1_range,
-                    array_dim1_length,
-                    chunk_buffer,
-                    dim0_read,
-                    dim1_read,
-                    |a0, a1, a2| unsafe {
-                        fpxdec32(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u32, 0)
-                    },
-                    delta2d_decode_xor,
-                    |val| val,
-                )
-            }
-            CompressionType::P4nzdec256logarithmic => {
-                let chunk_buffer = as_typed_slice_mut::<i16, u8>(chunk_buffer);
-                self.read_compressed(
-                    into,
-                    array_dim1_range,
-                    array_dim1_length,
-                    chunk_buffer,
-                    dim0_read,
-                    dim1_read,
-                    |a0, a1, a2| unsafe {
-                        p4nzdec128v16(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u16)
-                    },
-                    delta2d_decode,
-                    |val| {
-                        if val == i16::MAX {
-                            f32::NAN
-                        } else {
-                            10f32.powf(val as f32 / self.scalefactor) - 1.0
-                        }
-                    },
-                )
-            }
+        self.dimensions.check_read_ranges(&dim0_read, &dim1_read)?;
+
+        let mut ptr = vec![0u64; 12];
+
+        // dimensions
+        ptr[0] = self.dimensions.dim0 as u64;
+        ptr[1] = self.dimensions.dim1 as u64;
+        // chunks
+        ptr[2] = self.dimensions.chunk0 as u64;
+        ptr[3] = self.dimensions.chunk1 as u64;
+        // read offset
+        ptr[4] = dim0_read.start as u64;
+        ptr[5] = dim1_read.start as u64;
+        // read count
+        ptr[6] = dim0_read.len() as u64;
+        ptr[7] = dim1_read.len() as u64;
+        // cube offset
+        ptr[8] = 0;
+        ptr[9] = array_dim1_range.start as u64;
+        // cube dimensions
+        ptr[10] = dim0_read.len() as u64;
+        ptr[11] = array_dim1_length as u64;
+
+        let ptr = ptr.as_mut_ptr();
+
+        let mut decoder = create_decoder();
+        unsafe {
+            om_decoder_init(
+                &mut decoder,
+                self.scalefactor,
+                self.compression as c_uint,
+                om_datatype_t_DATA_TYPE_FLOAT,
+                2,
+                ptr,
+                ptr.add(2),
+                ptr.add(4),
+                ptr.add(6),
+                ptr.add(8),
+                ptr.add(10),
+                8,
+                1,
+                OmHeader::LENGTH as u64,
+                512,
+                65536,
+            );
+            self.backend.decode(&mut decoder, into, chunk_buffer)?;
         }
+
+        Ok(())
     }
+
+    // pub fn read(
+    //     &self,
+    //     into: &mut [f32],
+    //     array_dim1_range: Range<usize>,
+    //     array_dim1_length: usize,
+    //     chunk_buffer: &mut [u8],
+    //     dim0_read: Range<usize>,
+    //     dim1_read: Range<usize>,
+    // ) -> Result<(), OmFilesRsError> {
+    //     match self.compression {
+    //         CompressionType::P4nzdec256 => {
+    //             let chunk_buffer = as_typed_slice_mut::<i16, u8>(chunk_buffer);
+    //             self.read_compressed(
+    //                 into,
+    //                 array_dim1_range,
+    //                 array_dim1_length,
+    //                 chunk_buffer,
+    //                 dim0_read,
+    //                 dim1_read,
+    //                 |a0, a1, a2| unsafe {
+    //                     p4nzdec128v16(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u16)
+    //                 },
+    //                 delta2d_decode,
+    //                 |val| {
+    //                     if val == i16::MAX {
+    //                         f32::NAN
+    //                     } else {
+    //                         val as f32 / self.scalefactor
+    //                     }
+    //                 },
+    //             )
+    //         }
+    //         CompressionType::Fpxdec32 => {
+    //             let chunk_buffer = as_typed_slice_mut::<f32, u8>(chunk_buffer);
+    //             self.read_compressed(
+    //                 into,
+    //                 array_dim1_range,
+    //                 array_dim1_length,
+    //                 chunk_buffer,
+    //                 dim0_read,
+    //                 dim1_read,
+    //                 |a0, a1, a2| unsafe {
+    //                     fpxdec32(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u32, 0)
+    //                 },
+    //                 delta2d_decode_xor,
+    //                 |val| val,
+    //             )
+    //         }
+    //         CompressionType::P4nzdec256logarithmic => {
+    //             let chunk_buffer = as_typed_slice_mut::<i16, u8>(chunk_buffer);
+    //             self.read_compressed(
+    //                 into,
+    //                 array_dim1_range,
+    //                 array_dim1_length,
+    //                 chunk_buffer,
+    //                 dim0_read,
+    //                 dim1_read,
+    //                 |a0, a1, a2| unsafe {
+    //                     p4nzdec128v16(a0.as_ptr() as *mut u8, a1, a2.as_mut_ptr() as *mut u16)
+    //                 },
+    //                 delta2d_decode,
+    //                 |val| {
+    //                     if val == i16::MAX {
+    //                         f32::NAN
+    //                     } else {
+    //                         10f32.powf(val as f32 / self.scalefactor) - 1.0
+    //                     }
+    //                 },
+    //             )
+    //         }
+    //     }
+    // }
 
     #[inline(always)]
     pub fn read_compressed<T, F, G, H>(

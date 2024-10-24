@@ -1,4 +1,5 @@
 mod backends;
+mod decoder;
 mod dimensions;
 pub mod errors;
 mod header;
