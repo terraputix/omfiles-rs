@@ -397,7 +397,7 @@ dependencies = [
 [[package]]
 name = "omfileformatc-rs"
 version = "0.0.1"
-source = "git+https://github.com/terraputix/omfileformatc-rs?branch=main#649f79c214ab9a17ec060575a90c51ceb36fe01b"
+source = "git+https://github.com/terraputix/omfileformatc-rs?branch=main#f2b3ecc3920970e36d2bb6dff16644d1b73416d6"
 dependencies = [
  "bindgen",
  "libc",
