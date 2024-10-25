@@ -1,7 +1,7 @@
 use omfileformatc_rs::{
-    om_decocder_next_index_read, om_decoder_data_read_init, om_decoder_data_read_t,
-    om_decoder_decode_chunks, om_decoder_index_read_init, om_decoder_index_read_t,
-    om_decoder_next_data_read, om_decoder_t, om_range_t,
+    om_decoder_data_read_init, om_decoder_data_read_t, om_decoder_decode_chunks,
+    om_decoder_index_read_init, om_decoder_index_read_t, om_decoder_next_data_read,
+    om_decoder_next_index_read, om_decoder_t, om_range_t,
 };
 
 use crate::om::errors::OmFilesRsError;
@@ -51,7 +51,7 @@ pub trait OmFileReaderBackend {
             om_decoder_index_read_init(decoder, &mut index_read);
 
             // Loop over index blocks and read index data
-            while om_decocder_next_index_read(decoder, &mut index_read) {
+            while om_decoder_next_index_read(decoder, &mut index_read) {
                 let index_data =
                     self.get_bytes(index_read.offset as usize, index_read.count as usize)?;
 
