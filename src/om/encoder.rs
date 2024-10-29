@@ -269,15 +269,17 @@ impl OmFileEncoder {
         );
 
         while c_offset < number_of_chunks_in_array {
-            let mut read_coordinate = 0;
-            let mut write_coordinate = 0;
-            let mut linear_read_count = 1;
-            let mut linear_read = true;
-            let mut length_last = 0;
             let mut rolling_multiply = 1;
             let mut rolling_multiply_chunk_length = 1;
             let mut rolling_multiply_target_cube = 1;
 
+            let mut read_coordinate = 0usize;
+            let mut write_coordinate = 0usize;
+            let mut linear_read_count = 1u64;
+            let mut linear_read = true;
+            let mut length_last = 0u64;
+
+            // Calculate number of elements in this chunk and initial coordinates
             for i in (0..self.dims.len()).rev() {
                 let n_chunks_in_this_dimension =
                     (self.dims[i] + self.chunks[i] - 1) / self.chunks[i];
@@ -291,6 +293,7 @@ impl OmFileEncoder {
 
                 read_coordinate += (c0_offset * self.chunks[i] + array_offset[i]) as usize
                     * rolling_multiply_target_cube as usize;
+
                 assert!(length0 <= array_count[i]);
                 assert!(length0 <= array_dimensions[i]);
 
@@ -314,101 +317,114 @@ impl OmFileEncoder {
 
             let length_in_chunk = rolling_multiply_chunk_length;
 
-            match self.compression {
-                CompressionType::P4nzdec256 => {
-                    let chunk_buffer = unsafe {
-                        slice::from_raw_parts_mut(
-                            self.chunk_buffer.as_mut_ptr() as *mut i16,
-                            self.chunk_buffer.len() / 2,
-                        )
-                    };
-                    for i in 0..linear_read_count as usize {
-                        let val = array[read_coordinate + i];
-                        chunk_buffer[write_coordinate + i] = if val.is_nan() {
-                            i16::MAX
-                        } else {
-                            let scaled = val * self.scalefactor;
-                            scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
+            // Loop over elements to read and move to target buffer
+            'loop_buffer: loop {
+                match self.compression {
+                    CompressionType::P4nzdec256 => {
+                        let chunk_buffer = unsafe {
+                            slice::from_raw_parts_mut(
+                                self.chunk_buffer.as_mut_ptr() as *mut i16,
+                                self.chunk_buffer.len() / 2,
+                            )
                         };
+                        for i in 0..linear_read_count as usize {
+                            assert!(read_coordinate + i < array.len());
+                            assert!(write_coordinate + i < length_in_chunk as usize);
+                            let val = array[read_coordinate + i];
+                            chunk_buffer[write_coordinate + i] = if val.is_nan() {
+                                i16::MAX
+                            } else {
+                                let scaled = val * self.scalefactor;
+                                scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
+                            };
+                        }
+                    }
+                    CompressionType::Fpxdec32 => {
+                        let chunk_buffer = unsafe {
+                            slice::from_raw_parts_mut(
+                                self.chunk_buffer.as_mut_ptr() as *mut f32,
+                                self.chunk_buffer.len() / 4,
+                            )
+                        };
+                        for i in 0..linear_read_count as usize {
+                            assert!(read_coordinate + i < array.len());
+                            assert!(write_coordinate + i < length_in_chunk as usize);
+                            chunk_buffer[write_coordinate + i] = array[read_coordinate + i];
+                        }
+                    }
+                    CompressionType::P4nzdec256logarithmic => {
+                        let chunk_buffer = unsafe {
+                            slice::from_raw_parts_mut(
+                                self.chunk_buffer.as_mut_ptr() as *mut i16,
+                                self.chunk_buffer.len() / 2,
+                            )
+                        };
+                        for i in 0..linear_read_count as usize {
+                            assert!(read_coordinate + i < array.len());
+                            assert!(write_coordinate + i < length_in_chunk as usize);
+                            let val = array[read_coordinate + i];
+                            chunk_buffer[write_coordinate + i] = if val.is_nan() {
+                                i16::MAX
+                            } else {
+                                let scaled = (val.log10() + 1.0) * self.scalefactor;
+                                scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
+                            };
+                        }
                     }
                 }
-                CompressionType::Fpxdec32 => {
-                    let chunk_buffer = unsafe {
-                        slice::from_raw_parts_mut(
-                            self.chunk_buffer.as_mut_ptr() as *mut f32,
-                            self.chunk_buffer.len() / 4,
-                        )
-                    };
-                    for i in 0..linear_read_count as usize {
-                        chunk_buffer[write_coordinate + i] = array[read_coordinate + i];
+
+                read_coordinate += linear_read_count as usize - 1;
+                write_coordinate += linear_read_count as usize - 1;
+                write_coordinate += 1;
+
+                // Move to the next position
+                rolling_multiply_target_cube = 1;
+                linear_read = true;
+                linear_read_count = 1;
+
+                for i in (0..self.dims.len()).rev() {
+                    let q_pos = ((read_coordinate as u64 / rolling_multiply_target_cube)
+                        % array_dimensions[i]
+                        - array_offset[i])
+                        / self.chunks[i];
+                    let length0 =
+                        min((q_pos + 1) * self.chunks[i], array_count[i]) - q_pos * self.chunks[i];
+
+                    // Move forward
+                    read_coordinate += rolling_multiply_target_cube as usize;
+
+                    if i == self.dims.len() - 1
+                        && !(array_count[i] == length0 && array_dimensions[i] == length0)
+                    {
+                        linear_read_count = length0;
+                        linear_read = false;
                     }
-                }
-                CompressionType::P4nzdec256logarithmic => {
-                    let chunk_buffer = unsafe {
-                        slice::from_raw_parts_mut(
-                            self.chunk_buffer.as_mut_ptr() as *mut i16,
-                            self.chunk_buffer.len() / 2,
-                        )
-                    };
-                    for i in 0..linear_read_count as usize {
-                        let val = array[read_coordinate + i];
-                        chunk_buffer[write_coordinate + i] = if val.is_nan() {
-                            i16::MAX
-                        } else {
-                            let scaled = (val.log10() + 1.0) * self.scalefactor;
-                            scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
-                        };
+
+                    if linear_read && array_count[i] == length0 && array_dimensions[i] == length0 {
+                        linear_read_count *= length0;
+                    } else {
+                        linear_read = false;
+                    }
+
+                    let q0 = ((read_coordinate as u64 / rolling_multiply_target_cube)
+                        % array_dimensions[i]
+                        - array_offset[i])
+                        % self.chunks[i];
+                    if q0 != 0 && q0 != length0 {
+                        break; // No overflow in this dimension, break
+                    }
+
+                    read_coordinate -= (length0 * rolling_multiply_target_cube) as usize;
+
+                    rolling_multiply_target_cube *= array_dimensions[i];
+                    if i == 0 {
+                        // All chunks have been read. End of iteration
+                        break 'loop_buffer;
                     }
                 }
             }
 
-            read_coordinate += linear_read_count as usize - 1;
-            write_coordinate += linear_read_count as usize - 1;
-            write_coordinate += 1;
-
-            let mut rolling_multiply_target_cube = 1;
-            linear_read = true;
-            linear_read_count = 1;
-
-            for i in (0..self.dims.len()).rev() {
-                let q_pos = ((read_coordinate as u64 / rolling_multiply_target_cube)
-                    % array_dimensions[i]
-                    - array_offset[i])
-                    / self.chunks[i];
-                let length0 =
-                    min((q_pos + 1) * self.chunks[i], array_count[i]) - q_pos * self.chunks[i];
-
-                read_coordinate += rolling_multiply_target_cube as usize;
-
-                if i == self.dims.len() - 1
-                    && !(array_count[i] == length0 && array_dimensions[i] == length0)
-                {
-                    linear_read_count = length0;
-                    linear_read = false;
-                }
-
-                if linear_read && array_count[i] == length0 && array_dimensions[i] == length0 {
-                    linear_read_count *= length0;
-                } else {
-                    linear_read = false;
-                }
-
-                let q0 = ((read_coordinate as u64 / rolling_multiply_target_cube)
-                    % array_dimensions[i]
-                    - array_offset[i])
-                    % self.chunks[i];
-                if q0 != 0 && q0 != length0 {
-                    break;
-                }
-
-                read_coordinate -= (length0 * rolling_multiply_target_cube) as usize;
-
-                rolling_multiply_target_cube *= array_dimensions[i];
-                if i == 0 {
-                    break;
-                }
-            }
-
+            // Compression and writing to output buffer (same as before)
             let write_length: usize;
             let minimum_buffer: usize;
 
@@ -451,15 +467,16 @@ impl OmFileEncoder {
                     };
                 }
             }
-            println!("write_length: {}", write_length);
 
             if self.chunk_index == 0 {
+                // Store data start address
                 self.chunk_offset_bytes[self.chunk_index] = out.total_bytes_written;
             }
 
             out.write_position += write_length as u64;
             out.total_bytes_written += write_length as u64;
 
+            // Store chunk offset in LUT
             self.chunk_offset_bytes[self.chunk_index + 1] = out.total_bytes_written;
             self.chunk_index += 1;
             c_offset += 1;
@@ -468,6 +485,7 @@ impl OmFileEncoder {
                 return None;
             }
 
+            // Return to caller if the next chunk would not fit into the buffer
             if out.buffer.len() - out.write_position as usize <= minimum_buffer {
                 return Some(c_offset);
             }
