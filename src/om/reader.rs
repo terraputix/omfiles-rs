@@ -5,7 +5,7 @@ use crate::om::dimensions::Dimensions;
 use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
 use crate::om::mmapfile::{MmapFile, Mode};
-use crate::utils::{add_range, clamp_range, divide_range, subtract_range};
+use crate::utils::{add_range, divide_range};
 use std::fs::File;
 use std::ops::Range;
 use std::os::raw::c_uint;
@@ -246,122 +246,122 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     //     }
     // }
 
-    #[inline(always)]
-    pub fn read_compressed<T, F, G, H>(
-        &self,
-        into: &mut [f32],
-        array_dim1_range: Range<usize>,
-        array_dim1_length: usize,
-        chunk_buffer: &mut [T],
-        dim0_read: Range<usize>,
-        dim1_read: Range<usize>,
-        decompression_function: F,
-        delta_decoding_function: G,
-        into_conversion: H,
-    ) -> Result<(), OmFilesRsError>
-    where
-        T: Copy + Clone,
-        F: Fn(&[u8], usize, &mut [T]) -> usize,
-        G: Fn(usize, usize, &mut [T]),
-        H: Fn(T) -> f32,
-    {
-        self.dimensions.check_read_ranges(&dim0_read, &dim1_read)?;
-        let buffer = self.backend.get_bytes(0, self.backend.count())?;
-        let compressed_data_start_offset = OmHeader::LENGTH + self.dimensions.chunk_offset_length();
+    // #[inline(always)]
+    // pub fn read_compressed<T, F, G, H>(
+    //     &self,
+    //     into: &mut [f32],
+    //     array_dim1_range: Range<usize>,
+    //     array_dim1_length: usize,
+    //     chunk_buffer: &mut [T],
+    //     dim0_read: Range<usize>,
+    //     dim1_read: Range<usize>,
+    //     decompression_function: F,
+    //     delta_decoding_function: G,
+    //     into_conversion: H,
+    // ) -> Result<(), OmFilesRsError>
+    // where
+    //     T: Copy + Clone,
+    //     F: Fn(&[u8], usize, &mut [T]) -> usize,
+    //     G: Fn(usize, usize, &mut [T]),
+    //     H: Fn(T) -> f32,
+    // {
+    //     self.dimensions.check_read_ranges(&dim0_read, &dim1_read)?;
+    //     let buffer = self.backend.get_bytes(0, self.backend.count())?;
+    //     let compressed_data_start_offset = OmHeader::LENGTH + self.dimensions.chunk_offset_length();
 
-        // Fetch chunk table
-        let chunk_offsets =
-            as_typed_slice::<usize>(&buffer[OmHeader::LENGTH..compressed_data_start_offset]);
+    //     // Fetch chunk table
+    //     let chunk_offsets =
+    //         as_typed_slice::<usize>(&buffer[OmHeader::LENGTH..compressed_data_start_offset]);
 
-        // let n_dim0_chunks = self.dimensions.n_dim0_chunks();
-        let n_dim1_chunks = self.dimensions.n_dim1_chunks();
-        let n_chunks = self.dimensions.n_chunks();
+    //     // let n_dim0_chunks = self.dimensions.n_dim0_chunks();
+    //     let n_dim1_chunks = self.dimensions.n_dim1_chunks();
+    //     let n_chunks = self.dimensions.n_chunks();
 
-        let compressed_data_buffer = &buffer[compressed_data_start_offset..];
+    //     let compressed_data_buffer = &buffer[compressed_data_start_offset..];
 
-        for c0 in divide_range(&dim0_read, self.dimensions.chunk0) {
-            let c1_range = divide_range(&dim1_read, self.dimensions.chunk1);
-            let c1_chunks = add_range(&c1_range, c0 * n_dim1_chunks);
+    //     for c0 in divide_range(&dim0_read, self.dimensions.chunk0) {
+    //         let c1_range = divide_range(&dim1_read, self.dimensions.chunk1);
+    //         let c1_chunks = add_range(&c1_range, c0 * n_dim1_chunks);
 
-            self.backend.pre_read(
-                OmHeader::LENGTH
-                    + std::cmp::max(c1_chunks.start as isize - 1, 0) as usize
-                        * std::mem::size_of::<usize>(),
-                (c1_range.len() + 1) * std::mem::size_of::<usize>(),
-            )?;
+    //         self.backend.pre_read(
+    //             OmHeader::LENGTH
+    //                 + std::cmp::max(c1_chunks.start as isize - 1, 0) as usize
+    //                     * std::mem::size_of::<usize>(),
+    //             (c1_range.len() + 1) * std::mem::size_of::<usize>(),
+    //         )?;
 
-            for c1 in c1_range {
-                let length1 =
-                    std::cmp::min((c1 + 1) * self.dimensions.chunk1, self.dimensions.dim1)
-                        - c1 * self.dimensions.chunk1;
-                let length0 =
-                    std::cmp::min((c0 + 1) * self.dimensions.chunk0, self.dimensions.dim0)
-                        - c0 * self.dimensions.chunk0;
+    //         for c1 in c1_range {
+    //             let length1 =
+    //                 std::cmp::min((c1 + 1) * self.dimensions.chunk1, self.dimensions.dim1)
+    //                     - c1 * self.dimensions.chunk1;
+    //             let length0 =
+    //                 std::cmp::min((c0 + 1) * self.dimensions.chunk0, self.dimensions.dim0)
+    //                     - c0 * self.dimensions.chunk0;
 
-                let chunk_global0 =
-                    c0 * self.dimensions.chunk0..c0 * self.dimensions.chunk0 + length0;
-                let chunk_global1 =
-                    c1 * self.dimensions.chunk1..c1 * self.dimensions.chunk1 + length1;
+    //             let chunk_global0 =
+    //                 c0 * self.dimensions.chunk0..c0 * self.dimensions.chunk0 + length0;
+    //             let chunk_global1 =
+    //                 c1 * self.dimensions.chunk1..c1 * self.dimensions.chunk1 + length1;
 
-                let clamped_global0 = clamp_range(&chunk_global0, &dim0_read);
-                let clamped_global1 = clamp_range(&chunk_global1, &dim1_read);
+    //             let clamped_global0 = clamp_range(&chunk_global0, &dim0_read);
+    //             let clamped_global1 = clamp_range(&chunk_global1, &dim1_read);
 
-                let chunk_num = c0 * n_dim1_chunks + c1;
-                assert!(chunk_num < n_chunks, "Chunk number out of bounds");
-                let start_pos = if chunk_num == 0 {
-                    0
-                } else {
-                    chunk_offsets[chunk_num - 1]
-                };
-                assert!(
-                    compressed_data_start_offset + start_pos < self.backend.count(),
-                    "Chunk out of range read"
-                );
-                let length_compressed_bytes = chunk_offsets[chunk_num] - start_pos;
+    //             let chunk_num = c0 * n_dim1_chunks + c1;
+    //             assert!(chunk_num < n_chunks, "Chunk number out of bounds");
+    //             let start_pos = if chunk_num == 0 {
+    //                 0
+    //             } else {
+    //                 chunk_offsets[chunk_num - 1]
+    //             };
+    //             assert!(
+    //                 compressed_data_start_offset + start_pos < self.backend.count(),
+    //                 "Chunk out of range read"
+    //             );
+    //             let length_compressed_bytes = chunk_offsets[chunk_num] - start_pos;
 
-                self.backend.pre_read(
-                    compressed_data_start_offset + start_pos,
-                    length_compressed_bytes,
-                )?;
+    //             self.backend.pre_read(
+    //                 compressed_data_start_offset + start_pos,
+    //                 length_compressed_bytes,
+    //             )?;
 
-                // decompression is a function like
-                // size_t compressed_size = decode( char *in, size_t n, unsigned *out)
-                // compressed_size : number of bytes read from compressed input buffer in
-                let compressed_bytes = decompression_function(
-                    &compressed_data_buffer[start_pos..start_pos + length_compressed_bytes],
-                    length0 * length1,
-                    chunk_buffer,
-                );
+    //             // decompression is a function like
+    //             // size_t compressed_size = decode( char *in, size_t n, unsigned *out)
+    //             // compressed_size : number of bytes read from compressed input buffer in
+    //             let compressed_bytes = decompression_function(
+    //                 &compressed_data_buffer[start_pos..start_pos + length_compressed_bytes],
+    //                 length0 * length1,
+    //                 chunk_buffer,
+    //             );
 
-                assert_eq!(
-                    compressed_bytes, length_compressed_bytes,
-                    "chunk read bytes mismatch"
-                );
+    //             assert_eq!(
+    //                 compressed_bytes, length_compressed_bytes,
+    //                 "chunk read bytes mismatch"
+    //             );
 
-                delta_decoding_function(length0, length1, chunk_buffer);
+    //             delta_decoding_function(length0, length1, chunk_buffer);
 
-                let clamped_local0 = subtract_range(&clamped_global0, c0 * self.dimensions.chunk0);
-                let clamped_local1 = clamped_global1.start - c1 * self.dimensions.chunk1;
+    //             let clamped_local0 = subtract_range(&clamped_global0, c0 * self.dimensions.chunk0);
+    //             let clamped_local1 = clamped_global1.start - c1 * self.dimensions.chunk1;
 
-                for d0 in clamped_local0 {
-                    let read_start = clamped_local1 + d0 * length1;
-                    let local_out0 = chunk_global0.start + d0 - dim0_read.start;
-                    let local_out1 = clamped_global1.start - dim1_read.start;
-                    let local_range =
-                        local_out1 + local_out0 * array_dim1_length + array_dim1_range.start;
+    //             for d0 in clamped_local0 {
+    //                 let read_start = clamped_local1 + d0 * length1;
+    //                 let local_out0 = chunk_global0.start + d0 - dim0_read.start;
+    //                 let local_out1 = clamped_global1.start - dim1_read.start;
+    //                 let local_range =
+    //                     local_out1 + local_out0 * array_dim1_length + array_dim1_range.start;
 
-                    for i in 0..clamped_global1.len() {
-                        let pos_buffer = read_start + i;
-                        let pos_out = local_range + i;
-                        let val = chunk_buffer[pos_buffer];
-                        into[pos_out] = into_conversion(val);
-                    }
-                }
-            }
-        }
+    //                 for i in 0..clamped_global1.len() {
+    //                     let pos_buffer = read_start + i;
+    //                     let pos_out = local_range + i;
+    //                     let val = chunk_buffer[pos_buffer];
+    //                     into[pos_out] = into_conversion(val);
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub fn read_all(&mut self) -> Result<Vec<f32>, OmFilesRsError> {
         // Prefetch data
