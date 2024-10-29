@@ -9,6 +9,15 @@ pub fn divide_rounded_up(value: usize, divisor: usize) -> usize {
     }
 }
 
+pub fn divide_rounded_up_u64(value: &u64, divisor: &u64) -> u64 {
+    let rem = value % divisor;
+    if rem == 0 {
+        value / divisor
+    } else {
+        value / divisor + 1
+    }
+}
+
 /// Divide lower and upper bound. For upper bound use `divide_rounded_up`.
 pub fn divide_range(range: &Range<usize>, divisor: usize) -> Range<usize> {
     Range {

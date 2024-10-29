@@ -433,15 +433,22 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
 #[cfg(test)]
 mod tests {
     // use turbo_pfor_sys::fpxdec32;
-    use omfileformatc_rs::fpxdec32;
+    use omfileformatc_rs::{fpxdec32, om_datatype_t_DATA_TYPE_FLOAT};
 
     use crate::{
         compression::p4ndec256_bound,
-        om::{backends::OmFileReaderBackend, reader::OmFileReader},
+        om::{
+            backends::OmFileReaderBackend,
+            encoder::{OmFileBufferedWriter, OmFileEncoder},
+            mmapfile::{MmapFile, Mode},
+            omfile_json::{OmFileJSON, OmFileJSONVariable},
+            reader::OmFileReader,
+            reader2::OmFileReader2,
+        },
     };
 
     use super::*;
-    use std::{f32, fs, sync::Arc};
+    use std::{borrow::BorrowMut, f32, fs, sync::Arc};
 
     #[test]
     fn turbo_pfor_roundtrip() {
@@ -892,6 +899,67 @@ mod tests {
         }
 
         remove_file_if_exists(file);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
+        let file = "writetest.om";
+        std::fs::remove_file(file).ok();
+
+        let mut writer = OmFileEncoder::new(
+            vec![100, 100, 10],
+            vec![2, 2, 2],
+            CompressionType::P4nzdec256,
+            1.0,
+            256,
+        );
+        let mut buffer = OmFileBufferedWriter::new(writer.output_buffer_capacity());
+
+        let mut file_handle = File::create(file)?;
+        let mut file_handle_borrowed = file_handle.borrow_mut();
+
+        let data: Vec<f32> = (0..100000).map(|x| (x % 10000) as f32).collect();
+        buffer.write_header(&mut file_handle_borrowed)?;
+        writer.write_data(
+            &data,
+            &[100, 100, 10],
+            &[0..100, 0..100, 0..10],
+            &mut file_handle_borrowed,
+            &mut buffer,
+        )?;
+        let lut_start = buffer.total_bytes_written;
+        let lut_chunk_length = writer.write_lut(&mut buffer, &mut file_handle_borrowed)?;
+        let json_variable = OmFileJSONVariable {
+            name: None,
+            dimensions: writer.dims.clone(),
+            chunks: writer.chunks.clone(),
+            dimension_names: None,
+            scalefactor: writer.scalefactor,
+            compression: writer.compression.to_c(),
+            data_type: om_datatype_t_DATA_TYPE_FLOAT,
+            lut_offset: lut_start,
+            lut_chunk_size: lut_chunk_length,
+        };
+        let json = OmFileJSON {
+            variables: vec![json_variable],
+            some_attributes: None,
+        };
+        buffer.write_trailer(&json, &mut file_handle_borrowed)?;
+
+        let file_for_reading = File::open(file)?;
+        let read_fn = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+
+        let read = OmFileReader2::open_file(read_fn, 256)?;
+
+        let a1 = read.read_simple(&[50..51, 20..21, 1..2], 65536, 512)?;
+        assert_eq!(a1, vec![201.0]);
+
+        let a = read.read_simple(&[0..100, 0..100, 0..10], 65536, 512)?;
+        assert_eq!(a.len(), data.len());
+        let range = 0..100; // a.len() - 100..a.len() - 1
+        assert_eq!(a[range.clone()], data[range]);
 
         Ok(())
     }

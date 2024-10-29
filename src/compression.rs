@@ -15,6 +15,10 @@ impl CompressionType {
             CompressionType::Fpxdec32 => 4,
         }
     }
+
+    pub fn to_c(&self) -> u32 {
+        *self as u32
+    }
 }
 
 impl TryFrom<u8> for CompressionType {
@@ -32,6 +36,7 @@ impl TryFrom<u8> for CompressionType {
 
 /// For encoding: compression lib read and write more data to buffers
 /// https://github.com/powturbo/TurboPFor-Integer-Compression/issues/59
+/// /// Only the output buffer for encoding needs padding
 pub fn p4nenc256_bound(n: usize, bytes_per_element: usize) -> usize {
     ((n + 255) / 256 + (n + 32)) * bytes_per_element
 }
@@ -39,5 +44,6 @@ pub fn p4nenc256_bound(n: usize, bytes_per_element: usize) -> usize {
 /// For decoding: compression lib read and write more data to buffers
 /// https://github.com/powturbo/TurboPFor-Integer-Compression/issues/59
 pub fn p4ndec256_bound(n: usize, bytes_per_element: usize) -> usize {
+    // Note: padding for output buffer should noe be required anymore
     n * bytes_per_element + 32 * 4
 }

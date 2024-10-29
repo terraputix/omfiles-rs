@@ -1,4 +1,7 @@
-use omfileformatc_rs::om_decoder_t;
+use omfileformatc_rs::{
+    om_decoder_data_read_init, om_decoder_data_read_t, om_decoder_index_read_init,
+    om_decoder_index_read_t, om_decoder_t, om_range_t,
+};
 
 pub fn create_decoder() -> om_decoder_t {
     om_decoder_t {
@@ -21,4 +24,46 @@ pub fn create_decoder() -> om_decoder_t {
         scalefactor: 0.0,
         bytes_per_element: 0,
     }
+}
+
+pub fn new_index_read(decoder: &om_decoder_t) -> om_decoder_index_read_t {
+    let mut index_read = om_decoder_index_read_t {
+        offset: 0,
+        count: 0,
+        indexRange: om_range_t {
+            lowerBound: 0,
+            upperBound: 0,
+        },
+        chunkIndex: om_range_t {
+            lowerBound: 0,
+            upperBound: 0,
+        },
+        nextChunk: om_range_t {
+            lowerBound: 0,
+            upperBound: 0,
+        },
+    };
+    unsafe { om_decoder_index_read_init(decoder, &mut index_read) };
+    index_read
+}
+
+pub fn new_data_read(index_read: &om_decoder_index_read_t) -> om_decoder_data_read_t {
+    let mut data_read = om_decoder_data_read_t {
+        offset: 0,
+        count: 0,
+        indexRange: om_range_t {
+            lowerBound: 0,
+            upperBound: 0,
+        },
+        chunkIndex: om_range_t {
+            lowerBound: 0,
+            upperBound: 0,
+        },
+        nextChunk: om_range_t {
+            lowerBound: 0,
+            upperBound: 0,
+        },
+    };
+    unsafe { om_decoder_data_read_init(&mut data_read, index_read) };
+    data_read
 }

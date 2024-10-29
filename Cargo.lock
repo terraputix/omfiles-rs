@@ -397,7 +397,7 @@ dependencies = [
 [[package]]
 name = "omfileformatc-rs"
 version = "0.0.1"
-source = "git+https://github.com/terraputix/omfileformatc-rs?branch=main#f2b3ecc3920970e36d2bb6dff16644d1b73416d6"
+source = "git+https://github.com/terraputix/omfileformatc-rs?branch=main#f83659059c396bf8eb3a482808846be40ce5786a"
 dependencies = [
  "bindgen",
  "libc",
@@ -412,6 +412,7 @@ dependencies = [
  "omfileformatc-rs",
  "rand",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

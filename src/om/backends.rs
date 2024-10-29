@@ -4,12 +4,15 @@ use omfileformatc_rs::{
     om_decoder_next_index_read, om_decoder_t, om_range_t,
 };
 
+use crate::om::decoder::new_data_read;
 use crate::om::errors::OmFilesRsError;
 use crate::om::mmapfile::MmapType;
 use crate::om::mmapfile::{MAdvice, MmapFile};
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::raw::c_void;
+
+use super::decoder::new_index_read;
 
 pub trait OmFileWriterBackend {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError>;
@@ -31,47 +34,17 @@ pub trait OmFileReaderBackend {
         into: &mut [f32],
         chunk_buffer: &mut [u8],
     ) -> Result<(), OmFilesRsError> {
-        let mut index_read = om_decoder_index_read_t {
-            offset: 0,
-            count: 0,
-            indexRange: om_range_t {
-                lowerBound: 0,
-                upperBound: 0,
-            },
-            chunkIndex: om_range_t {
-                lowerBound: 0,
-                upperBound: 0,
-            },
-            nextChunk: om_range_t {
-                lowerBound: 0,
-                upperBound: 0,
-            },
-        };
-        unsafe {
-            om_decoder_index_read_init(decoder, &mut index_read);
+        println!("decoder: {:?}", decoder);
 
+        let mut index_read = new_index_read(decoder);
+        unsafe {
             // Loop over index blocks and read index data
             while om_decoder_next_index_read(decoder, &mut index_read) {
+                println!("index_read: {:?}", index_read);
                 let index_data =
                     self.get_bytes(index_read.offset as usize, index_read.count as usize)?;
 
-                let mut data_read = om_decoder_data_read_t {
-                    offset: 0,
-                    count: 0,
-                    indexRange: om_range_t {
-                        lowerBound: 0,
-                        upperBound: 0,
-                    },
-                    chunkIndex: om_range_t {
-                        lowerBound: 0,
-                        upperBound: 0,
-                    },
-                    nextChunk: om_range_t {
-                        lowerBound: 0,
-                        upperBound: 0,
-                    },
-                };
-                om_decoder_data_read_init(&mut data_read, &index_read);
+                let mut data_read = new_data_read(&index_read);
 
                 // Loop over data blocks and read compressed data chunks
                 while om_decoder_next_data_read(
@@ -80,6 +53,7 @@ pub trait OmFileReaderBackend {
                     index_data.as_ptr() as *const c_void, // Urgh!
                     index_read.count,
                 ) {
+                    println!("data_read: {:?}", data_read);
                     let data_data =
                         self.get_bytes(data_read.offset as usize, data_read.count as usize)?;
 
