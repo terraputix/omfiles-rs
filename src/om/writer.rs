@@ -992,7 +992,7 @@ mod tests {
 
         let file_for_reading = File::open(file)?;
         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-        let read = OmFileReader2::open_file(read_backend, 256)?;
+        let read = OmFileReader2::open_file(read_backend, 2)?;
 
         let a = read.read_simple(&[0..5, 0..5], 65536, 512)?;
         assert_eq!(a, data);
@@ -1021,7 +1021,7 @@ mod tests {
                     std::f32::NAN,
                     std::f32::NAN,
                 ];
-                assert_eq!(r, expected);
+                assert_eq_with_nan(r.as_slice(), expected.as_slice());
             }
         }
 
@@ -1405,6 +1405,21 @@ mod tests {
         for (e, a) in expected.iter().zip(actual.iter()) {
             assert!((e - a).abs() < accuracy, "Expected: {}, Actual: {}", e, a);
         }
+    }
+
+    fn eq_with_nan_eq(a: f32, b: f32) -> bool {
+        (a.is_nan() && b.is_nan()) || (a == b)
+    }
+
+    fn vec_compare(va: &[f32], vb: &[f32]) -> bool {
+        (va.len() == vb.len()) &&  // zip stops at the shortest
+         va.iter()
+           .zip(vb)
+           .all(|(a,b)| eq_with_nan_eq(*a,*b))
+    }
+
+    fn assert_eq_with_nan(expected: &[f32], actual: &[f32]) {
+        assert!(vec_compare(&expected, &actual))
     }
 
     fn remove_file_if_exists(file: &str) {
