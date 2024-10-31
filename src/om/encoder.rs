@@ -16,13 +16,13 @@ use super::omfile_json::OmFileJSON;
 
 pub struct OmFileBufferedWriter {
     pub buffer: Vec<u8>,
-    pub write_position: u64,
-    pub total_bytes_written: u64,
-    pub capacity: u64,
+    pub write_position: usize,
+    pub total_bytes_written: usize,
+    pub capacity: usize,
 }
 
 impl OmFileBufferedWriter {
-    pub fn new(capacity: u64) -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
             buffer: vec![0; capacity as usize],
             write_position: 0,
@@ -63,8 +63,8 @@ impl OmFileBufferedWriter {
 
     fn write_trailer_internal(&mut self, meta: &OmFileJSON) -> Result<(), OmFilesRsError> {
         let json = serde_json::to_vec(meta).map_err(|_| OmFilesRsError::JSONSerializationError)?;
-        assert!(self.capacity - self.write_position >= json.len() as u64);
-        let json_length = json.len() as u64;
+        assert!(self.capacity - self.write_position >= json.len());
+        let json_length = json.len();
         self.buffer[self.write_position as usize..(self.write_position + json_length) as usize]
             .copy_from_slice(&json);
         self.write_position += json_length;
@@ -89,10 +89,11 @@ impl Drop for OmFileBufferedWriter {
 
 pub struct OmFileEncoder {
     pub scalefactor: f32,
+    pub add_offset: f32,
     pub compression: CompressionType,
-    pub dims: Vec<u64>,
-    pub chunks: Vec<u64>,
-    pub chunk_offset_bytes: Vec<u64>,
+    pub dims: Vec<usize>,
+    pub chunks: Vec<usize>,
+    pub chunk_offset_bytes: Vec<usize>,
     pub chunk_buffer: Vec<u8>,
     pub chunk_index: usize,
     pub lut_chunk_element_count: usize,
@@ -100,27 +101,29 @@ pub struct OmFileEncoder {
 
 impl OmFileEncoder {
     pub fn new(
-        dimensions: Vec<u64>,
-        chunk_dimensions: Vec<u64>,
+        dimensions: Vec<usize>,
+        chunk_dimensions: Vec<usize>,
         compression: CompressionType,
         scalefactor: f32,
+        add_offset: f32,
         lut_chunk_element_count: usize,
     ) -> Self {
-        let n_chunks: u64 = dimensions
+        let n_chunks: usize = dimensions
             .iter()
             .zip(&chunk_dimensions)
-            .map(|(d, c)| divide_rounded_up_u64(d, c))
+            .map(|(d, c)| divide_rounded_up(d.clone(), c.clone()))
             .product();
-        let chunk_size_byte = chunk_dimensions.iter().product::<u64>() * 4;
+        let chunk_size_byte = chunk_dimensions.iter().product::<usize>() * 4;
         if chunk_size_byte > 1024 * 1024 * 4 {
             println!(
                 "WARNING: Chunk size greater than 4 MB ({} MB)!",
                 chunk_size_byte as f32 / 1024.0 / 1024.0
             );
         }
-        let buffer_size = p4nenc256_bound(chunk_dimensions.iter().product::<u64>() as usize, 4);
+        let buffer_size = p4nenc256_bound(chunk_dimensions.iter().product::<usize>() as usize, 4);
         Self {
             scalefactor,
+            add_offset,
             compression,
             dims: dimensions,
             chunks: chunk_dimensions,
@@ -132,27 +135,27 @@ impl OmFileEncoder {
     }
 
     /// Return the total number of chunks in this file
-    pub fn number_of_chunks(&self) -> u64 {
+    pub fn number_of_chunks(&self) -> usize {
         self.dims
             .iter()
             .zip(&self.chunks)
-            .map(|(dim, chunk)| divide_rounded_up_u64(dim, chunk))
+            .map(|(dim, chunk)| divide_rounded_up(dim.clone(), chunk.clone()))
             .product()
     }
 
     /// Calculate the size of the output buffer.
-    pub fn output_buffer_capacity(&self) -> u64 {
+    pub fn output_buffer_capacity(&self) -> usize {
         let buffer_size = p4nenc256_bound(
-            self.chunks.iter().product::<u64>() as usize,
+            self.chunks.iter().product::<usize>(),
             self.compression.bytes_per_element(),
-        ) as u64;
+        );
 
         let n_chunks = self
             .dims
             .iter()
             .zip(&self.chunks)
-            .map(|(dim, chunk)| divide_rounded_up_u64(dim, chunk))
-            .product::<u64>();
+            .map(|(dim, chunk)| divide_rounded_up(dim.clone(), chunk.clone()))
+            .product::<usize>();
 
         // Assume the LUT buffer is not compressible
         let lut_buffer_size = n_chunks * 8;
@@ -163,8 +166,8 @@ impl OmFileEncoder {
     pub fn write_data<Backend: OmFileWriterBackend>(
         &mut self,
         array: &[f32],
-        array_dimensions: &[u64],
-        array_read: &[Range<u64>],
+        array_dimensions: &[usize],
+        array_read: &[Range<usize>],
         backend: &mut Backend,
         out: &mut OmFileBufferedWriter,
     ) -> Result<(), OmFilesRsError> {
@@ -197,14 +200,14 @@ impl OmFileEncoder {
         &mut self,
         out: &mut OmFileBufferedWriter,
         backend: &mut Backend,
-    ) -> Result<u64, OmFilesRsError> {
+    ) -> Result<usize, OmFilesRsError> {
         let lut_chunk_length = self.write_lut_internal(out);
         backend.write(&out.buffer[0..out.write_position as usize])?;
         out.write_position = 0;
         Ok(lut_chunk_length)
     }
 
-    fn write_lut_internal(&mut self, out: &mut OmFileBufferedWriter) -> u64 {
+    fn write_lut_internal(&mut self, out: &mut OmFileBufferedWriter) -> usize {
         let mut max_length = 0;
 
         println!("lut_chunk_element_count: {}", self.lut_chunk_element_count);
@@ -246,27 +249,24 @@ impl OmFileEncoder {
                     out.buffer[out.write_position as usize..].as_mut_ptr(),
                 )
             };
-            out.write_position += max_length as u64;
-            out.total_bytes_written += max_length as u64;
+            out.write_position += max_length;
+            out.total_bytes_written += max_length;
         }
 
-        max_length as u64
+        max_length
     }
 
     fn write_next_chunks(
         &mut self,
         array: &[f32],
-        array_dimensions: &[u64],
-        array_offset: &[u64],
-        array_count: &[u64],
-        mut c_offset: u64,
-        number_of_chunks_in_array: u64,
+        array_dimensions: &[usize],
+        array_offset: &[usize],
+        array_count: &[usize],
+        mut c_offset: usize,
+        number_of_chunks_in_array: usize,
         out: &mut OmFileBufferedWriter,
-    ) -> Option<u64> {
-        assert_eq!(
-            array.len(),
-            array_dimensions.iter().product::<u64>() as usize
-        );
+    ) -> Option<usize> {
+        assert_eq!(array.len(), array_dimensions.iter().product::<usize>());
 
         while c_offset < number_of_chunks_in_array {
             let mut rolling_multiply = 1;
@@ -275,15 +275,15 @@ impl OmFileEncoder {
 
             let mut read_coordinate = 0usize;
             let mut write_coordinate = 0usize;
-            let mut linear_read_count = 1u64;
+            let mut linear_read_count = 1usize;
             let mut linear_read = true;
-            let mut length_last = 0u64;
+            let mut length_last = 0usize;
 
             // Calculate number of elements in this chunk and initial coordinates
             for i in (0..self.dims.len()).rev() {
                 let n_chunks_in_this_dimension =
                     (self.dims[i] + self.chunks[i] - 1) / self.chunks[i];
-                let c0 = (self.chunk_index as u64 / rolling_multiply) % n_chunks_in_this_dimension;
+                let c0 = (self.chunk_index / rolling_multiply) % n_chunks_in_this_dimension;
                 let c0_offset = (c_offset / rolling_multiply) % n_chunks_in_this_dimension;
                 let length0 = min((c0 + 1) * self.chunks[i], self.dims[i]) - c0 * self.chunks[i];
 
@@ -383,7 +383,7 @@ impl OmFileEncoder {
                 linear_read_count = 1;
 
                 for i in (0..self.dims.len()).rev() {
-                    let q_pos = ((read_coordinate as u64 / rolling_multiply_target_cube)
+                    let q_pos = ((read_coordinate / rolling_multiply_target_cube)
                         % array_dimensions[i]
                         - array_offset[i])
                         / self.chunks[i];
@@ -406,7 +406,7 @@ impl OmFileEncoder {
                         linear_read = false;
                     }
 
-                    let q0 = ((read_coordinate as u64 / rolling_multiply_target_cube)
+                    let q0 = ((read_coordinate / rolling_multiply_target_cube)
                         % array_dimensions[i]
                         - array_offset[i])
                         % self.chunks[i];
@@ -473,8 +473,8 @@ impl OmFileEncoder {
                 self.chunk_offset_bytes[self.chunk_index] = out.total_bytes_written;
             }
 
-            out.write_position += write_length as u64;
-            out.total_bytes_written += write_length as u64;
+            out.write_position += write_length;
+            out.total_bytes_written += write_length;
 
             // Store chunk offset in LUT
             self.chunk_offset_bytes[self.chunk_index + 1] = out.total_bytes_written;

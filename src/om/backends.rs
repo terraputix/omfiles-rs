@@ -1,7 +1,6 @@
 use omfileformatc_rs::{
-    om_decoder_data_read_init, om_decoder_data_read_t, om_decoder_decode_chunks,
-    om_decoder_index_read_init, om_decoder_index_read_t, om_decoder_next_data_read,
-    om_decoder_next_index_read, om_decoder_t, om_range_t,
+    OmDecoder_decodeChunks, OmDecoder_nexDataRead, OmDecoder_nextIndexRead, OmDecoder_t,
+    OmError_t_ERROR_OK,
 };
 
 use crate::om::decoder::new_data_read;
@@ -30,7 +29,7 @@ pub trait OmFileReaderBackend {
 
     fn decode(
         &self,
-        decoder: &om_decoder_t,
+        decoder: &OmDecoder_t,
         into: &mut [f32],
         chunk_buffer: &mut [u8],
     ) -> Result<(), OmFilesRsError> {
@@ -39,31 +38,35 @@ pub trait OmFileReaderBackend {
         let mut index_read = new_index_read(decoder);
         unsafe {
             // Loop over index blocks and read index data
-            while om_decoder_next_index_read(decoder, &mut index_read) {
+            while OmDecoder_nextIndexRead(decoder, &mut index_read) {
                 println!("index_read: {:?}", index_read);
                 let index_data =
                     self.get_bytes(index_read.offset as usize, index_read.count as usize)?;
 
                 let mut data_read = new_data_read(&index_read);
 
+                let mut error = OmError_t_ERROR_OK;
+
                 // Loop over data blocks and read compressed data chunks
-                while om_decoder_next_data_read(
+                while OmDecoder_nexDataRead(
                     decoder,
                     &mut data_read,
                     index_data.as_ptr() as *const c_void, // Urgh!
                     index_read.count,
+                    &mut error,
                 ) {
                     println!("data_read: {:?}", data_read);
                     let data_data =
                         self.get_bytes(data_read.offset as usize, data_read.count as usize)?;
 
-                    om_decoder_decode_chunks(
+                    OmDecoder_decodeChunks(
                         decoder,
                         data_read.chunkIndex,
                         data_data.as_ptr() as *const c_void, // Urgh!
                         data_read.count,
                         into.as_mut_ptr() as *mut c_void, // Urgh!
                         chunk_buffer.as_mut_ptr() as *mut c_void, // Urgh!
+                        &mut error,
                     );
                 }
             }

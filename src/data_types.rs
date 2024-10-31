@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 #[repr(u8)]
 pub enum DataType {
     Int8 = 0,
@@ -23,5 +23,9 @@ impl DataType {
             DataType::Int32 | DataType::Uint32 | DataType::Float => 4,
             DataType::Int64 | DataType::Uint64 | DataType::Double => 8,
         }
+    }
+
+    pub fn to_c(&self) -> u32 {
+        *self as u32
     }
 }
