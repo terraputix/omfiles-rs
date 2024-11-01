@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use omfiles_rs::compression::CompressionType;
-use omfiles_rs::om::reader2::OmFileReader2;
+use omfiles_rs::om::reader::OmFileReader;
 use omfiles_rs::om::writer::OmFileWriter;
 use rand::Rng;
 use std::fs;
@@ -84,7 +84,7 @@ pub fn benchmark_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("Read OM file");
 
     let file = "benchmark.om";
-    let reader = OmFileReader2::from_file(file).unwrap();
+    let reader = OmFileReader::from_file(file).unwrap();
 
     let dim0_read_size = 256;
 
