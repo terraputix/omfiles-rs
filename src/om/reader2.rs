@@ -141,7 +141,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         io_size_merge: usize,
     ) -> Result<(), OmFilesRsError> {
         let v = &self.json.variables[0];
-        println!("v: {:?}", v);
         let n_dimensions = v.dimensions.len();
         assert_eq!(dim_read.len(), n_dimensions);
         assert_eq!(into_cube_offset.len(), n_dimensions);

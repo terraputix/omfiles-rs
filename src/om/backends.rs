@@ -34,13 +34,10 @@ pub trait OmFileReaderBackend {
         into: &mut [OmType],
         chunk_buffer: &mut [u8],
     ) -> Result<(), OmFilesRsError> {
-        println!("decoder: {:?}", decoder);
-
         let mut index_read = new_index_read(decoder);
         unsafe {
             // Loop over index blocks and read index data
             while OmDecoder_nextIndexRead(decoder, &mut index_read) {
-                println!("index_read: {:?}", index_read);
                 let index_data =
                     self.get_bytes(index_read.offset as usize, index_read.count as usize)?;
 
@@ -56,7 +53,6 @@ pub trait OmFileReaderBackend {
                     index_read.count,
                     &mut error,
                 ) {
-                    println!("data_read: {:?}", data_read);
                     let data_data =
                         self.get_bytes(data_read.offset as usize, data_read.count as usize)?;
 
