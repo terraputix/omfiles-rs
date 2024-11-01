@@ -1,4 +1,4 @@
-mod backends;
+pub mod backends;
 mod decoder;
 mod dimensions;
 mod encoder;
