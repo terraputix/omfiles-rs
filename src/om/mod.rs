@@ -1,7 +1,6 @@
 pub mod backends;
-mod decoder;
+mod c_defaults;
 mod dimensions;
-mod encoder;
 pub mod errors;
 mod header;
 pub mod mmapfile;

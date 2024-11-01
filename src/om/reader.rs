@@ -12,7 +12,7 @@ use std::os::raw::c_uint;
 // use turbo_pfor_sys::{fpxdec32, p4nzdec128v16};
 use omfileformatc_rs::{OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_init};
 
-use super::decoder::create_decoder;
+use super::c_defaults::create_decoder;
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub backend: Backend,

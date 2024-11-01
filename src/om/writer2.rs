@@ -2,7 +2,7 @@ use crate::compression::CompressionType;
 use crate::data_types::DataType;
 // use crate::datatypes::DataType;
 use crate::om::backends::OmFileWriterBackend;
-use crate::om::decoder::create_encoder;
+use crate::om::c_defaults::create_encoder;
 use crate::om::errors::OmFilesRsError;
 use crate::om::omfile_json::{OmFileJSON, OmFileJSONVariable};
 use crate::om::write_buffer::OmWriteBuffer;

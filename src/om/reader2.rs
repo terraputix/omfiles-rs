@@ -4,7 +4,7 @@ use std::fs::File;
 use std::ops::Range;
 
 use crate::data_types::{DataType, OmFileDataType};
-use crate::om::decoder::create_decoder;
+use crate::om::c_defaults::create_decoder;
 
 use super::backends::OmFileReaderBackend;
 use super::errors::OmFilesRsError;

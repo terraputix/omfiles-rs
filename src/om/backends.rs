@@ -4,7 +4,7 @@ use omfileformatc_rs::{
 };
 
 use crate::data_types::OmFileDataType;
-use crate::om::decoder::new_data_read;
+use crate::om::c_defaults::new_data_read;
 use crate::om::errors::OmFilesRsError;
 use crate::om::mmapfile::MmapType;
 use crate::om::mmapfile::{MAdvice, MmapFile};
@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::raw::c_void;
 
-use super::decoder::new_index_read;
+use super::c_defaults::new_index_read;
 
 pub trait OmFileWriterBackend {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError>;
