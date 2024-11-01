@@ -119,7 +119,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             .variables
             .iter()
             .map(|variable| OmFileVariableReader {
-                backend: self.backend,
+                backend: &self.backend,
                 variable: variable.clone(),
                 lut_chunk_element_count: self.lut_chunk_element_count,
             })
@@ -197,13 +197,13 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
 }
 
 /// Reader for a single variable, holding a reference to the file handle.
-pub struct OmFileVariableReader<Backend: OmFileReaderBackend> {
-    backend: Backend,
+pub struct OmFileVariableReader<'a, Backend: OmFileReaderBackend> {
+    backend: &'a Backend,
     variable: OmFileJSONVariable,
     lut_chunk_element_count: usize,
 }
 
-impl<Backend: OmFileReaderBackend> OmFileVariableReader<Backend> {
+impl<'a, Backend: OmFileReaderBackend> OmFileVariableReader<'a, Backend> {
     /// Read the variable as `f32`.
     pub fn read(
         &self,
