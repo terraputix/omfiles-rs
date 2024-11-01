@@ -9,6 +9,7 @@ use omfiles_rs::{
         errors::OmFilesRsError,
         mmapfile::{MmapFile, Mode},
         omfile_json::{OmFileJSON, OmFileJSONVariable},
+        reader::OmFileReader,
         reader2::OmFileReader2,
         write_buffer::OmWriteBuffer,
         writer::OmFileWriter,
@@ -1067,30 +1068,31 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// #[test]
-// fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
-//     let file = "writetest_nan.om";
-//     remove_file_if_exists(file);
+#[test]
+fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
+    let file = "writetest_nan.om";
+    remove_file_if_exists(file);
 
-//     let data: Vec<f32> = (0..(5 * 5)).map(|_| f32::NAN).collect();
+    let data: Vec<f32> = (0..(5 * 5)).map(|_| f32::NAN).collect();
 
-//     OmFileWriter::new(5, 5, 5, 5).write_to_file(
-//         file,
-//         CompressionType::P4nzdec256,
-//         1.0,
-//         false,
-//         |_| Ok(data.as_slice()),
-//     )?;
+    OmFileWriter::new(5, 5, 5, 5).write_to_file(
+        file,
+        CompressionType::P4nzdec256,
+        1.0,
+        false,
+        |_| Ok(data.as_slice()),
+    )?;
 
-//     let reader = OmFileReader2::from_file(file)?;
+    let reader = OmFileReader::from_file(file)?;
 
-//     // assert that all values are nan
-//     assert!(reader.read_simple([1..2, 1..2])?.iter().all(|x| x.is_nan()));
-
-//     remove_file_if_exists(file);
-
-//     Ok(())
-// }
+    // assert that all values are nan
+    assert!(reader
+        .read_range(Some(1..2), Some(1..2))?
+        .iter()
+        .all(|x| x.is_nan()));
+    remove_file_if_exists(file);
+    Ok(())
+}
 
 // #[test]
 // fn test_write() -> Result<(), OmFilesRsError> {
