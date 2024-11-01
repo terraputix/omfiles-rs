@@ -394,30 +394,26 @@ use super::reader2::OmFileReader2;
 //     }
 // }
 
-impl OmFileReader2<MmapFile> {
-    /// Convenience initializer to create an `OmFileReader` from a file path.
-    pub fn from_file(file: &str) -> Result<Self, OmFilesRsError> {
-        let file_handle = File::open(file).map_err(|e| OmFilesRsError::CannotOpenFile {
-            filename: file.to_string(),
-            errno: e.raw_os_error().unwrap_or(0),
-            error: e.to_string(),
-        })?;
-        Self::from_file_handle(file_handle)
-    }
+// OmFileReader<Backend> {
+//     pub fn new(backend: Backend) -> Result<Self, OmFilesRsError> {
+//         // Fetch header
+//         backend.pre_read(0, OmHeader::LENGTH)?;
+//         let bytes = backend.get_bytes(0, OmHeader::LENGTH)?;
+//         let header = OmHeader::from_bytes(bytes)?;
 
-    /// Convenience initializer to create an `OmFileReader` from an existing `FileHandle`.
-    pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
-        // TODO: Error handling
-        let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
-        Self::open_file(mmap, 256) // FIXME
-    }
+//         let dimensions = Dimensions::new(header.dim0, header.dim1, header.chunk0, header.chunk1);
 
-    /// Check if the file was deleted on the file system.
-    /// Linux keeps the file alive as long as some processes have it open.
-    pub fn was_deleted(&self) -> bool {
-        self.backend.was_deleted()
-    }
-}
+//         Ok(Self {
+//             backend,
+//             dimensions: dimensions,
+//             scalefactor: header.scalefactor,
+//             compression: if header.version == 1 {
+//                 CompressionType::P4nzdec256
+//             } else {
+//                 CompressionType::try_from(header.compression)?
+//             },
+//         })
+//     }
 
 // impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
 //     /// Read data. This version is a bit slower, because it is allocating the output buffer

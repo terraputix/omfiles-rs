@@ -1,14 +1,15 @@
-use omfileformatc_rs::{OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_readBufferSize, OmError_string};
 use omfileformatc_rs::{OmDecoder_init, OmError_t_ERROR_OK};
+use omfileformatc_rs::{OmDecoder_readBufferSize, OmError_string};
+use std::fs::File;
 use std::ops::Range;
 
-use crate::compression::CompressionType;
 use crate::data_types::{DataType, OmFileDataType};
 use crate::om::decoder::create_decoder;
 
 use super::backends::OmFileReaderBackend;
 use super::errors::OmFilesRsError;
 use super::header::OmHeader;
+use super::mmapfile::{MmapFile, Mode};
 use super::omfile_json::{OmFileJSON, OmFileJSONVariable};
 
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {
@@ -27,26 +28,30 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     }
 }
 
-// OmFileReader<Backend> {
-//     pub fn new(backend: Backend) -> Result<Self, OmFilesRsError> {
-//         // Fetch header
-//         backend.pre_read(0, OmHeader::LENGTH)?;
-//         let bytes = backend.get_bytes(0, OmHeader::LENGTH)?;
-//         let header = OmHeader::from_bytes(bytes)?;
+impl OmFileReader2<MmapFile> {
+    /// Convenience initializer to create an `OmFileReader` from a file path.
+    pub fn from_file(file: &str) -> Result<Self, OmFilesRsError> {
+        let file_handle = File::open(file).map_err(|e| OmFilesRsError::CannotOpenFile {
+            filename: file.to_string(),
+            errno: e.raw_os_error().unwrap_or(0),
+            error: e.to_string(),
+        })?;
+        Self::from_file_handle(file_handle)
+    }
 
-//         let dimensions = Dimensions::new(header.dim0, header.dim1, header.chunk0, header.chunk1);
+    /// Convenience initializer to create an `OmFileReader` from an existing `FileHandle`.
+    pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
+        // TODO: Error handling
+        let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
+        Self::open_file(mmap, 256) // FIXME
+    }
 
-//         Ok(Self {
-//             backend,
-//             dimensions: dimensions,
-//             scalefactor: header.scalefactor,
-//             compression: if header.version == 1 {
-//                 CompressionType::P4nzdec256
-//             } else {
-//                 CompressionType::try_from(header.compression)?
-//             },
-//         })
-//     }
+    /// Check if the file was deleted on the file system.
+    /// Linux keeps the file alive as long as some processes have it open.
+    pub fn was_deleted(&self) -> bool {
+        self.backend.was_deleted()
+    }
+}
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     pub fn open_file(
