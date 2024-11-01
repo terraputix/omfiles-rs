@@ -283,6 +283,7 @@ impl<'a, Backend: OmFileReaderBackend> OmFileVariableReader<'a, Backend> {
         let chunk_buffer_size = unsafe { OmDecoder_readBufferSize(&mut decoder) } as usize;
         let mut chunk_buffer = vec![0u8; chunk_buffer_size];
         self.backend
-            .decode(&mut decoder, into, chunk_buffer.as_mut_slice());
+            .decode(&mut decoder, into, chunk_buffer.as_mut_slice())
+            .expect("Unexpected error in OmDecoder");
     }
 }

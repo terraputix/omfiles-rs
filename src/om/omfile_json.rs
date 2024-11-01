@@ -1,7 +1,5 @@
-use omfileformatc_rs::{OmCompression_t, OmDataType_t};
-use serde::{Deserialize, Serialize};
-
 use crate::{compression::CompressionType, data_types::DataType};
+use serde::{Deserialize, Serialize};
 
 /// The entry level JSON structure to decode all meta data inside an OpenMeteo file
 /// Should contain an attribute `variable` with a list of variables in this file

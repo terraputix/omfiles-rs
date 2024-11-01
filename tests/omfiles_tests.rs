@@ -1380,10 +1380,6 @@ fn assert_eq_with_accuracy(expected: &[f32], actual: &[f32], accuracy: f32) {
     }
 }
 
-fn eq_with_nan_eq(a: f32, b: f32) -> bool {
-    (a.is_nan() && b.is_nan()) || (a == b)
-}
-
 // Helper function to assert equality with NaN handling and a specified accuracy
 fn assert_eq_with_nan(actual: &[f32], expected: &[f32], accuracy: f32) {
     assert_eq!(actual.len(), expected.len(), "Lengths differ");
