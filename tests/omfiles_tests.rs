@@ -182,7 +182,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer = OmWriteBuffer::new(1);
 
     let mut file_handle = File::create(file)?;
-    let mut file_handle_borrowed = file_handle.borrow_mut();
+    let mut file_handle = file_handle.borrow_mut();
 
     let data: Vec<f32> = (0..100000).map(|x| (x % 10000) as f32).collect();
     OmFileWriter2::write_header(&mut buffer);
@@ -190,7 +190,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
         &data,
         &[100, 100, 10],
         &[0..100, 0..100, 0..10],
-        &mut file_handle_borrowed,
+        &mut file_handle,
         &mut buffer,
     )?;
     let json_variable = writer.compress_lut_and_return_meta(&mut buffer);
@@ -200,7 +200,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     };
     OmFileWriter2::write_trailer(&mut buffer, &json)?;
 
-    buffer.write_to_file(&mut file_handle_borrowed)?;
+    buffer.write_to_file(&mut file_handle)?;
 
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
@@ -223,22 +223,24 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest.om";
     remove_file_if_exists(file);
 
-    let mut writer = OmFileEncoder::new(
+    let mut writer = OmFileWriterArray::new(
         vec![5, 5],
         vec![2, 2],
         CompressionType::P4nzdec256,
+        DataType::Float,
         1.0,
         0.0,
         256,
     );
 
-    let mut buffer = OmFileBufferedWriter::new(writer.output_buffer_capacity());
+    let mut buffer = OmWriteBuffer::new(1);
 
     let mut file_handle = File::create(file)?;
     let mut file_handle = file_handle.borrow_mut();
 
+    OmFileWriter2::write_header(&mut buffer);
+
     // Directly feed individual chunks
-    buffer.write_header(&mut file_handle)?;
     writer.write_data(
         &[0.0, 1.0, 5.0, 6.0],
         &[2, 2],
@@ -303,25 +305,12 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
         &mut buffer,
     )?;
 
-    let lut_start = buffer.total_bytes_written;
-    let lut_chunk_length = writer.write_lut(&mut buffer, &mut file_handle)?;
-    let json_variable = OmFileJSONVariable {
-        name: None,
-        dimensions: writer.dims.clone(),
-        chunks: writer.chunks.clone(),
-        dimension_names: None,
-        scalefactor: writer.scalefactor,
-        add_offset: writer.add_offset,
-        compression: writer.compression.to_c(),
-        data_type: OmDataType_t_DATA_TYPE_FLOAT,
-        lut_offset: lut_start,
-        lut_chunk_size: lut_chunk_length,
-    };
+    let json_variable = writer.compress_lut_and_return_meta(&mut buffer);
     let json = OmFileJSON {
         variables: vec![json_variable],
         some_attributes: None,
     };
-    buffer.write_trailer(&json, &mut file_handle)?;
+    OmFileWriter2::write_trailer(&mut buffer, &json)?;
 
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;

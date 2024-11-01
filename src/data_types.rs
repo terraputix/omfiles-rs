@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum DataType {
     Int8 = 0,
@@ -28,4 +28,47 @@ impl DataType {
     pub fn to_c(&self) -> u32 {
         *self as u32
     }
+}
+pub trait OmFileDataType {
+    const DATA_TYPE: DataType;
+}
+
+impl OmFileDataType for i8 {
+    const DATA_TYPE: DataType = DataType::Int8;
+}
+
+impl OmFileDataType for u8 {
+    const DATA_TYPE: DataType = DataType::Uint8;
+}
+
+impl OmFileDataType for i16 {
+    const DATA_TYPE: DataType = DataType::Int16;
+}
+
+impl OmFileDataType for u16 {
+    const DATA_TYPE: DataType = DataType::Uint16;
+}
+
+impl OmFileDataType for i32 {
+    const DATA_TYPE: DataType = DataType::Int32;
+}
+
+impl OmFileDataType for u32 {
+    const DATA_TYPE: DataType = DataType::Uint32;
+}
+
+impl OmFileDataType for i64 {
+    const DATA_TYPE: DataType = DataType::Int64;
+}
+
+impl OmFileDataType for u64 {
+    const DATA_TYPE: DataType = DataType::Uint64;
+}
+
+impl OmFileDataType for f32 {
+    const DATA_TYPE: DataType = DataType::Float;
+}
+
+impl OmFileDataType for f64 {
+    const DATA_TYPE: DataType = DataType::Double;
 }

@@ -1,8 +1,9 @@
-use omfileformatc_rs::OmDecoder_init;
-use omfileformatc_rs::{OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_readBufferSize};
+use omfileformatc_rs::{OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_readBufferSize, OmError_string};
+use omfileformatc_rs::{OmDecoder_init, OmError_t_ERROR_OK};
 use std::ops::Range;
 
 use crate::compression::CompressionType;
+use crate::data_types::{DataType, OmFileDataType};
 use crate::om::decoder::create_decoder;
 
 use super::backends::OmFileReaderBackend;
@@ -72,8 +73,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                 dimension_names: None,
                 scalefactor: header.scalefactor,
                 add_offset: 0.0,
-                compression: header.compression as u32, // TODO: avoid type cast
-                data_type: OmDataType_t_DATA_TYPE_FLOAT,
+                compression: header.compression, // TODO: avoid type cast
+                data_type: DataType::Float,
                 lut_offset: OmHeader::LENGTH,
                 lut_size: 8,
             };
@@ -112,6 +113,19 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         })
     }
 
+    /// Get all variables combined with a reference to the file handle to keep it open.
+    pub fn get_variables(&self) -> Vec<OmFileVariableReader<Backend>> {
+        self.json
+            .variables
+            .iter()
+            .map(|variable| OmFileVariableReader {
+                backend: self.backend,
+                variable: variable.clone(),
+                lut_chunk_element_count: self.lut_chunk_element_count,
+            })
+            .collect()
+    }
+
     pub fn read(
         &self,
         into: &mut [f32],
@@ -137,8 +151,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                 &mut decoder,
                 v.scalefactor,
                 v.add_offset,
-                v.compression,
-                v.data_type,
+                v.compression.to_c(),
+                v.data_type.to_c(),
                 v.dimensions.len(),
                 v.dimensions.as_ptr(),
                 v.chunks.as_ptr(),
@@ -179,5 +193,91 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             io_size_merge,
         )?;
         Ok(out)
+    }
+}
+
+/// Reader for a single variable, holding a reference to the file handle.
+pub struct OmFileVariableReader<Backend: OmFileReaderBackend> {
+    backend: Backend,
+    variable: OmFileJSONVariable,
+    lut_chunk_element_count: usize,
+}
+
+impl<Backend: OmFileReaderBackend> OmFileVariableReader<Backend> {
+    /// Read the variable as `f32`.
+    pub fn read(
+        &self,
+        dim_read: &[Range<usize>],
+        io_size_max: usize,
+        io_size_merge: usize,
+    ) -> Vec<f32> {
+        let out_dims: Vec<usize> = dim_read.iter().map(|r| r.end - r.start).collect();
+        let n: usize = out_dims.iter().product();
+        let mut out = vec![f32::NAN; n];
+
+        self.read_into(
+            &mut out,
+            dim_read,
+            &vec![0; dim_read.len()],
+            &out_dims,
+            io_size_max,
+            io_size_merge,
+        );
+        out
+    }
+
+    /// Read a variable from an OM file into the provided buffer.
+    pub fn read_into<OmType: OmFileDataType>(
+        &self,
+        into: &mut [OmType],
+        dim_read: &[Range<usize>],
+        into_cube_offset: &[usize],
+        into_cube_dimension: &[usize],
+        io_size_max: usize,
+        io_size_merge: usize,
+    ) {
+        let n_dimensions = self.variable.dimensions.len();
+        assert_eq!(OmType::DATA_TYPE, self.variable.data_type);
+        assert_eq!(dim_read.len(), n_dimensions);
+        assert_eq!(into_cube_offset.len(), n_dimensions);
+        assert_eq!(into_cube_dimension.len(), n_dimensions);
+
+        let read_offset: Vec<usize> = dim_read.iter().map(|r| r.start).collect();
+        let read_count: Vec<usize> = dim_read.iter().map(|r| (r.end - r.start)).collect();
+
+        let mut decoder = create_decoder();
+        let error = unsafe {
+            OmDecoder_init(
+                &mut decoder,
+                self.variable.scalefactor,
+                self.variable.add_offset,
+                self.variable.compression.to_c(),
+                self.variable.data_type.to_c(),
+                n_dimensions,
+                self.variable.dimensions.as_ptr(),
+                self.variable.chunks.as_ptr(),
+                read_offset.as_ptr(),
+                read_count.as_ptr(),
+                into_cube_offset.as_ptr(),
+                into_cube_dimension.as_ptr(),
+                self.variable.lut_size,
+                self.lut_chunk_element_count,
+                self.variable.lut_offset,
+                io_size_merge,
+                io_size_max,
+            )
+        };
+        if error != OmError_t_ERROR_OK {
+            panic!("OmDecoder: {}", unsafe {
+                std::ffi::CStr::from_ptr(OmError_string(error))
+                    .to_string_lossy()
+                    .into_owned()
+            });
+        }
+
+        let chunk_buffer_size = unsafe { OmDecoder_readBufferSize(&mut decoder) } as usize;
+        let mut chunk_buffer = vec![0u8; chunk_buffer_size];
+        self.backend
+            .decode(&mut decoder, into, chunk_buffer.as_mut_slice());
     }
 }

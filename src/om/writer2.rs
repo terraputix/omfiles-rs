@@ -209,8 +209,8 @@ impl OmFileWriterArray {
             dimension_names: None,
             scalefactor: self.scale_factor,
             add_offset: self.add_offset,
-            compression: self.compression.to_c(),
-            data_type: self.data_type.to_c(),
+            compression: self.compression,
+            data_type: self.data_type,
             lut_offset,
             lut_size,
         }

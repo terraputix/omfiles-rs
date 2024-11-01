@@ -236,7 +236,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
             magic_number1: OmHeader::MAGIC_NUMBER1,
             magic_number2: OmHeader::MAGIC_NUMBER2,
             version: OmHeader::VERSION,
-            compression: self.compression as u8,
+            compression: self.compression,
             scalefactor: self.scalefactor,
             dim0: self.dimensions.dim0,
             dim1: self.dimensions.dim1,

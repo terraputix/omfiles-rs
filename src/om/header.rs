@@ -1,11 +1,11 @@
-use crate::om::errors::OmFilesRsError;
+use crate::{compression::CompressionType, om::errors::OmFilesRsError};
 
 #[repr(C)]
 pub struct OmHeader {
     pub magic_number1: u8,
     pub magic_number2: u8,
     pub version: u8,
-    pub compression: u8,
+    pub compression: CompressionType,
     pub scalefactor: f32,
     pub dim0: usize,
     pub dim1: usize,
@@ -31,7 +31,7 @@ impl OmHeader {
         let magic_number1 = bytes[0];
         let magic_number2 = bytes[1];
         let version = bytes[2];
-        let compression = bytes[3];
+        let compression = CompressionType::try_from(bytes[3])?;
 
         let scalefactor = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
         let dim0 = usize::from_le_bytes(bytes[8..16].try_into().unwrap());
@@ -64,7 +64,7 @@ impl OmHeader {
         bytes[0] = self.magic_number1;
         bytes[1] = self.magic_number2;
         bytes[2] = self.version;
-        bytes[3] = self.compression;
+        bytes[3] = self.compression as u8;
 
         let scalefactor_bytes = self.scalefactor.to_le_bytes();
         let dim0_bytes = self.dim0.to_le_bytes();
