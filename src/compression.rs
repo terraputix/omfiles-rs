@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::om::errors::OmFilesRsError;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum CompressionType {
     P4nzdec256 = 0,

@@ -1,4 +1,4 @@
-use omfileformatc_rs::{om_compression_t, om_datatype_t};
+use crate::{compression::CompressionType, data_types::DataType};
 use serde::{Deserialize, Serialize};
 
 /// The entry level JSON structure to decode all meta data inside an OpenMeteo file
@@ -16,30 +16,32 @@ pub struct OmFileJSON {
 /// `dimensions` and `chunks` to describe the shape of data
 /// `compression` and `scalefactor` define how data is compressed
 /// `lutOffset` and `lutChunkSize` are required to locate data inside the file
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OmFileJSONVariable {
     pub name: Option<String>,
 
     /// The dimensions of the file
-    pub dimensions: Vec<u64>,
+    pub dimensions: Vec<usize>,
 
     /// How the dimensions are chunked
-    pub chunks: Vec<u64>,
+    pub chunks: Vec<usize>,
 
     pub dimension_names: Option<Vec<String>>,
 
     /// The scalefactor that is applied to convert floating point values to integers
     pub scalefactor: f32,
 
+    pub add_offset: f32,
+
     /// Type of compression and coding. E.g. delta, zigzag coding is then implemented in different compression routines
-    pub compression: om_compression_t,
+    pub compression: CompressionType,
 
     /// Data type like float, int32, uint64
-    pub data_type: om_datatype_t,
+    pub data_type: DataType,
 
     /// The offset position of the beginning of the look up table LUT. The LUT contains then data positions for each chunk
-    pub lut_offset: u64,
+    pub lut_offset: usize,
 
-    /// How long a chunk inside the LUT is after compression
-    pub lut_chunk_size: u64,
+    /// The total size of the compressed LUT.
+    pub lut_size: usize,
 }

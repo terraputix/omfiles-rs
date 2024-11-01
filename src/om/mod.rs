@@ -1,11 +1,12 @@
-mod backends;
-mod decoder;
+pub mod backends;
+mod c_defaults;
 mod dimensions;
-mod encoder;
 pub mod errors;
 mod header;
-mod mmapfile;
-mod omfile_json;
+pub mod mmapfile;
+pub mod omfile_json;
 pub mod reader;
-mod reader2;
+pub mod reader2;
+pub mod write_buffer;
 pub mod writer;
+pub mod writer2;
