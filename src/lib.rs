@@ -1,5 +1,3 @@
-// src/lib.rs
-
 // for now allow dead code
 
 mod aligned_buffer;

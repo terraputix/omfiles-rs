@@ -9,7 +9,7 @@ use crate::om::c_defaults::create_decoder;
 use super::backends::OmFileReaderBackend;
 use super::errors::OmFilesRsError;
 use super::header::OmHeader;
-use super::mmapfile::{MmapFile, Mode};
+use super::io::mmapfile::{MmapFile, Mode};
 use super::omfile_json::{OmFileJSON, OmFileJSONVariable};
 
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {

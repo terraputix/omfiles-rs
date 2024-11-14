@@ -1,6 +1,8 @@
 use memmap2::{Advice, Mmap, MmapMut, MmapOptions, UncheckedAdvice};
 use std::fs::File;
 
+use crate::om::{backends::OmFileReaderBackend, errors::OmFilesRsError};
+
 pub struct MmapFile {
     pub data: MmapType,
     pub file: File,
@@ -104,5 +106,31 @@ impl MmapFile {
 impl Drop for MmapFile {
     fn drop(&mut self) {
         // The Mmap type will automatically unmap the memory when it is dropped
+    }
+}
+
+impl OmFileReaderBackend for MmapFile {
+    fn count(&self) -> usize {
+        self.data.len()
+    }
+
+    fn needs_prefetch(&self) -> bool {
+        true
+    }
+
+    fn prefetch_data(&self, offset: usize, count: usize) {
+        self.prefetch_data_advice(offset, count, MAdvice::WillNeed);
+    }
+
+    fn pre_read(&self, _offset: usize, _count: usize) -> Result<(), OmFilesRsError> {
+        // No-op for mmaped file
+        Ok(())
+    }
+
+    fn get_bytes(&self, offset: usize, count: usize) -> Result<&[u8], OmFilesRsError> {
+        match self.data {
+            MmapType::ReadOnly(ref mmap) => Ok(&mmap[offset..offset + count]),
+            MmapType::ReadWrite(ref mmap_mut) => Ok(&mmap_mut[offset..offset + count]),
+        }
     }
 }

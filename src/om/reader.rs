@@ -4,7 +4,7 @@ use crate::om::backends::OmFileReaderBackend;
 use crate::om::dimensions::Dimensions;
 use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
-use crate::om::mmapfile::{MmapFile, Mode};
+use crate::om::io::mmapfile::{MmapFile, Mode};
 use crate::utils::{add_range, divide_range};
 use omfileformatc_rs::{OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_init};
 use std::fs::File;
