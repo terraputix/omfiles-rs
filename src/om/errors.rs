@@ -34,6 +34,7 @@ pub enum OmFilesRsError {
     DimensionMustBeLargerThan0,
     NotAOmFile,
     InvalidHeaderLength,
+    JSONSerializationError,
     FileExistsAlready {
         filename: String,
     },
@@ -45,6 +46,7 @@ pub enum OmFilesRsError {
     },
     InvalidCompressionType,
     TryingToWriteToReadOnlyFile,
+    UnknownVersion(u8),
 }
 
 impl std::fmt::Display for OmFilesRsError {
@@ -134,6 +136,12 @@ impl std::fmt::Display for OmFilesRsError {
             }
             OmFilesRsError::TryingToWriteToReadOnlyFile => {
                 write!(f, "Trying to write to read-only file")
+            }
+            OmFilesRsError::JSONSerializationError => {
+                write!(f, "JSON serialization error")
+            }
+            OmFilesRsError::UnknownVersion(v) => {
+                write!(f, "Unknown version {}", v)
             }
         }
     }
