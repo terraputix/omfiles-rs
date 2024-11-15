@@ -712,9 +712,6 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(value, expected);
     }
 
-    // Clean up by removing the test file
-    std::fs::remove_file(file)?;
-
     Ok(())
 }
 
@@ -898,9 +895,6 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(value, expected);
     }
 
-    // Clean up by removing the test file
-    remove_file_if_exists(file);
-
     Ok(())
 }
 
@@ -1054,9 +1048,6 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(value, expected);
     }
 
-    // Clean up by removing the test file
-    remove_file_if_exists(file);
-
     Ok(())
 }
 
@@ -1082,7 +1073,6 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
         .read_range(Some(1..2), Some(1..2))?
         .iter()
         .all(|x| x.is_nan()));
-    remove_file_if_exists(file);
     Ok(())
 }
 
@@ -1360,8 +1350,6 @@ fn test_write_fpx() -> Result<(), Box<dyn std::error::Error>> {
             ]
         );
     }
-
-    remove_file_if_exists(file);
 
     Ok(())
 }

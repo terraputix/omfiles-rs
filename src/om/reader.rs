@@ -6,10 +6,9 @@ use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
 use crate::om::io::mmapfile::{MmapFile, Mode};
 use crate::utils::{add_range, divide_range};
-use omfileformatc_rs::{OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_init};
+use omfileformatc_rs::{OmCompression_t, OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_init};
 use std::fs::File;
 use std::ops::Range;
-use std::os::raw::c_uint;
 
 use super::c_defaults::create_decoder;
 
@@ -152,7 +151,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                 &mut decoder,
                 self.scalefactor,
                 0.0, // add_offset
-                self.compression as c_uint,
+                self.compression as OmCompression_t,
                 OmDataType_t_DATA_TYPE_FLOAT,
                 2,
                 ptr,
