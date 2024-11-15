@@ -14,7 +14,7 @@ impl InMemoryBackend {
     }
 }
 
-impl OmFileWriterBackend for &mut InMemoryBackend {
+impl OmFileWriterBackend for InMemoryBackend {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError> {
         self.data.extend_from_slice(data);
         Ok(())

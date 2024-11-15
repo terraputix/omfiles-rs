@@ -7,6 +7,7 @@ use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
 use crate::om::io::memory::InMemoryBackend;
 use crate::utils::divide_rounded_up;
+use std::borrow::BorrowMut;
 use std::fs::File;
 use std::path::Path;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
@@ -54,7 +55,7 @@ impl OmFileWriter {
     /// chunks of 3, so that the last chunk will only cover 1 location.
     pub fn write<'a, Backend: OmFileWriterBackend>(
         &self,
-        backend: Backend,
+        backend: &mut Backend,
         compression_type: CompressionType,
         scalefactor: f32,
         fsync: bool,
@@ -109,7 +110,7 @@ impl OmFileWriter {
                 error: e.to_string(),
             })?;
         self.write(
-            &mut file_handle,
+            file_handle.borrow_mut(),
             compression_type,
             scalefactor,
             true,
@@ -141,7 +142,13 @@ impl OmFileWriter {
         supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
     ) -> Result<InMemoryBackend, OmFilesRsError> {
         let mut data = InMemoryBackend::new(Vec::new());
-        self.write(&mut data, compression_type, scalefactor, true, supply_chunk)?;
+        self.write(
+            data.borrow_mut(),
+            compression_type,
+            scalefactor,
+            true,
+            supply_chunk,
+        )?;
         Ok(data)
     }
 
@@ -155,8 +162,8 @@ impl OmFileWriter {
     }
 }
 
-pub struct OmFileWriterState<Backend: OmFileWriterBackend> {
-    pub backend: Backend,
+pub struct OmFileWriterState<'a, Backend: OmFileWriterBackend> {
+    pub backend: &'a mut Backend,
 
     pub dimensions: Dimensions,
 
@@ -187,9 +194,9 @@ pub struct OmFileWriterState<Backend: OmFileWriterBackend> {
     chunk_offset_bytes: Vec<usize>,
 }
 
-impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
+impl<'a, Backend: OmFileWriterBackend> OmFileWriterState<'a, Backend> {
     pub fn new(
-        backend: Backend,
+        backend: &'a mut Backend,
         dim0: usize,
         dim1: usize,
         chunk0: usize,

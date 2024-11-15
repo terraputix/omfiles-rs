@@ -6,7 +6,7 @@ use omfiles_rs::{
     om::{
         backends::OmFileReaderBackend,
         errors::OmFilesRsError,
-        mmapfile::{MmapFile, Mode},
+        io::mmapfile::{MmapFile, Mode},
         omfile_json::OmFileJSON,
         reader::OmFileReader,
         reader2::OmFileReader2,
@@ -17,7 +17,6 @@ use omfiles_rs::{
 };
 
 use std::{
-    borrow::BorrowMut,
     f32,
     fs::{self, File},
     sync::Arc,
@@ -182,7 +181,6 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer = OmWriteBuffer::new(1);
 
     let mut file_handle = File::create(file)?;
-    let mut file_handle = file_handle.borrow_mut();
 
     let data: Vec<f32> = (0..100000).map(|x| (x % 10000) as f32).collect();
     OmFileWriter2::write_header(&mut buffer);
@@ -236,7 +234,6 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer = OmWriteBuffer::new(1);
 
     let mut file_handle = File::create(file)?;
-    let mut file_handle = file_handle.borrow_mut();
 
     OmFileWriter2::write_header(&mut buffer);
 
@@ -361,7 +358,6 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the file handle
     let mut file_handle = File::create(file)?;
-    let mut file_handle = file_handle.borrow_mut();
 
     // Deliberately add NaN on all positions that should not be written to the file.
     // Only the inner 5x5 array is written.
@@ -482,7 +478,6 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut buffer = OmWriteBuffer::new(1);
     let mut file_handle = File::create(file)?;
-    let mut file_handle = file_handle.borrow_mut();
 
     let data: Vec<f32> = (0..27).map(|x| x as f32).collect();
 
@@ -567,7 +562,6 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the file handle for writing
     let mut file_handle = File::create(file)?;
-    let mut file_handle = file_handle.borrow_mut();
 
     // Define the data to write
     let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
@@ -754,7 +748,6 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the file handle for writing
     let mut file_handle = File::create(file)?;
-    let mut file_handle = file_handle.borrow_mut();
 
     // Define the data to write
     let data: Vec<f32> = vec![
