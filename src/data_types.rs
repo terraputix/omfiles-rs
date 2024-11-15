@@ -1,3 +1,4 @@
+use omfileformatc_rs::OmDataType_t;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -25,8 +26,8 @@ impl DataType {
         }
     }
 
-    pub fn to_c(&self) -> u32 {
-        *self as u32
+    pub fn to_c(&self) -> OmDataType_t {
+        *self as OmDataType_t
     }
 }
 pub trait OmFileDataType {

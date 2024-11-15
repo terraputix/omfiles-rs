@@ -1,3 +1,4 @@
+use omfileformatc_rs::OmCompression_t;
 use serde::{Deserialize, Serialize};
 
 use crate::om::errors::OmFilesRsError;
@@ -18,8 +19,8 @@ impl CompressionType {
         }
     }
 
-    pub fn to_c(&self) -> u32 {
-        *self as u32
+    pub fn to_c(&self) -> OmCompression_t {
+        *self as OmCompression_t
     }
 }
 
