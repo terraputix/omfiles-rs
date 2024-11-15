@@ -1,4 +1,6 @@
-use memmap2::{Advice, Mmap, MmapMut, MmapOptions, UncheckedAdvice};
+#[cfg(unix)]
+use memmap2::{Advice, UncheckedAdvice};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use std::fs::File;
 
 pub struct MmapFile {
@@ -12,6 +14,7 @@ pub enum MmapType {
 }
 
 impl MmapType {
+    #[cfg(unix)]
     fn advise_range(&self, advice: Advice, offset: usize, len: usize) -> std::io::Result<()> {
         match self {
             MmapType::ReadOnly(mmap) => mmap.advise_range(advice, offset, len),
@@ -19,6 +22,7 @@ impl MmapType {
         }
     }
 
+    #[cfg(unix)]
     fn unchecked_advise_range(
         &self,
         advice: UncheckedAdvice,
@@ -59,6 +63,7 @@ pub enum MAdvice {
 }
 
 impl MAdvice {
+    #[cfg(unix)]
     fn advice(&self, mmap: &MmapType, offset: usize, len: usize) -> std::io::Result<()> {
         match self {
             MAdvice::WillNeed => mmap.advise_range(Advice::WillNeed, offset, len),
@@ -66,6 +71,11 @@ impl MAdvice {
                 mmap.unchecked_advise_range(UncheckedAdvice::DontNeed, offset, len)
             }
         }
+    }
+
+    #[cfg(not(unix))]
+    fn advice(&self, _mmap: &MmapType, _offset: usize, _len: usize) -> std::io::Result<()> {
+        Ok(()) // No-op on non-Unix systems
     }
 }
 
