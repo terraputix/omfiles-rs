@@ -12,6 +12,7 @@ use omfileformatc_rs::{
     om_variable_write_numeric_array_size, om_variable_write_scalar, om_variable_write_scalar_size,
     OmEncoder_t, OmError_t_ERROR_OK, OmOffsetSize_t,
 };
+use std::borrow::BorrowMut;
 use std::os::raw::c_void;
 
 pub struct OmOffsetSize {
@@ -83,7 +84,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
     }
 
     pub fn prepare_array<T: OmFileArrayDataType>(
-        &mut self,
+        mut self,
         dimensions: Vec<u64>,
         chunk_dimensions: Vec<u64>,
         compression: CompressionType,
@@ -91,7 +92,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         add_offset: f32,
         lut_chunk_element_count: u64,
     ) -> Result<OmFileWriterArray<FileHandle>, OmFilesRsError> {
-        self.write_header_if_required()?;
+        &self.write_header_if_required()?;
         Ok(OmFileWriterArray::new(
             dimensions,
             chunk_dimensions,
@@ -247,7 +248,12 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriterArray<FileHandle> {
         array_offset: Option<&[u64]>,
         array_count: Option<&[u64]>,
     ) -> Result<(), OmFilesRsError> {
-        let array_offset = array_offset.unwrap_or(&vec![0; array_dimensions.len()]);
+        let default_offset = vec![0; array_dimensions.len()];
+        let array_offset = if let Some(unwrapped) = array_offset {
+            unwrapped
+        } else {
+            default_offset.as_slice()
+        };
         let array_count = array_count.unwrap_or(array_dimensions);
 
         let array_size: u64 = array_dimensions.iter().product::<u64>();

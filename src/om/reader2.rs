@@ -20,7 +20,6 @@ use super::backends::OmFileReaderBackend;
 use super::errors::OmFilesRsError;
 use super::header::{self, OmHeader};
 use super::mmapfile::{MmapFile, Mode};
-use super::omfile_json::{OmFileJSON, OmFileJSONVariable};
 use crate::data_types::OmFileScalarDataType;
 use omfileformatc_rs::{
     om_header_size, om_header_type, om_variable_init, OmHeaderType_t_OM_HEADER_INVALID,
