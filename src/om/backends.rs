@@ -1,5 +1,5 @@
 use omfileformatc_rs::{
-    OmDecoder_decodeChunks, OmDecoder_nexDataRead, OmDecoder_nextIndexRead, OmDecoder_t,
+    om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
     OmError_t_ERROR_OK,
 };
 
@@ -37,7 +37,7 @@ pub trait OmFileReaderBackend {
         let mut index_read = new_index_read(decoder);
         unsafe {
             // Loop over index blocks and read index data
-            while OmDecoder_nextIndexRead(decoder, &mut index_read) {
+            while om_decoder_next_index_read(decoder, &mut index_read) {
                 let index_data =
                     self.get_bytes(index_read.offset as usize, index_read.count as usize)?;
 
@@ -46,7 +46,7 @@ pub trait OmFileReaderBackend {
                 let mut error = OmError_t_ERROR_OK;
 
                 // Loop over data blocks and read compressed data chunks
-                while OmDecoder_nexDataRead(
+                while om_decoder_next_data_read(
                     decoder,
                     &mut data_read,
                     index_data.as_ptr() as *const c_void, // Urgh!
@@ -56,7 +56,7 @@ pub trait OmFileReaderBackend {
                     let data_data =
                         self.get_bytes(data_read.offset as usize, data_read.count as usize)?;
 
-                    OmDecoder_decodeChunks(
+                    om_decoder_decode_chunks(
                         decoder,
                         data_read.chunkIndex,
                         data_data.as_ptr() as *const c_void, // Urgh!

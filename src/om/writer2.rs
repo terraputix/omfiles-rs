@@ -7,9 +7,10 @@ use crate::om::errors::OmFilesRsError;
 use crate::om::omfile_json::{OmFileJSON, OmFileJSONVariable};
 use crate::om::write_buffer::OmWriteBuffer;
 use omfileformatc_rs::{
-    OmEncoder_chunkBufferSize, OmEncoder_compressChunk, OmEncoder_compressLut,
-    OmEncoder_compressedChunkBufferSize, OmEncoder_countChunks, OmEncoder_countChunksInArray,
-    OmEncoder_init, OmEncoder_lutBufferSize, OmEncoder_t, OmError_t_ERROR_OK,
+    om_encoder_chunk_buffer_size, om_encoder_compress_chunk, om_encoder_compress_lut,
+    om_encoder_compressed_chunk_buffer_size, om_encoder_count_chunks,
+    om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, OmEncoder_t,
+    OmError_t_ERROR_OK,
 };
 use std::ops::Range;
 use std::os::raw::c_void;
@@ -34,7 +35,7 @@ impl OmFileWriter2 {
     ) -> Result<(), serde_json::Error> {
         // Serialize and write JSON
         let json = serde_json::to_vec(meta)?;
-        buffer.reallocate(json.len());
+        buffer.reallocate(json.len() as u64);
         buffer.write_bytes(&json);
 
         // Write length of JSON
@@ -48,29 +49,29 @@ impl OmFileWriter2 {
 
 /// Compress a single variable inside an om file.
 pub struct OmFileWriterArray {
-    look_up_table: Vec<usize>,
+    look_up_table: Vec<u64>,
     encoder: OmEncoder_t,
-    chunk_index: usize,
+    chunk_index: u64,
     scale_factor: f32,
     add_offset: f32,
     compression: CompressionType,
     data_type: DataType,
-    dimensions: Vec<usize>,
-    chunks: Vec<usize>,
-    compressed_chunk_buffer_size: usize,
+    dimensions: Vec<u64>,
+    chunks: Vec<u64>,
+    compressed_chunk_buffer_size: u64,
     chunk_buffer: Vec<u8>,
 }
 
 impl OmFileWriterArray {
     /// `lut_chunk_element_count` should be 256 for production files.
     pub fn new(
-        dimensions: Vec<usize>,
-        chunk_dimensions: Vec<usize>,
+        dimensions: Vec<u64>,
+        chunk_dimensions: Vec<u64>,
         compression: CompressionType,
         data_type: DataType,
         scale_factor: f32,
         add_offset: f32,
-        lut_chunk_element_count: usize,
+        lut_chunk_element_count: u64,
     ) -> Self {
         assert_eq!(dimensions.len(), chunk_dimensions.len());
 
@@ -78,7 +79,7 @@ impl OmFileWriterArray {
 
         let mut encoder = create_encoder();
         let error = unsafe {
-            OmEncoder_init(
+            om_encoder_init(
                 &mut encoder,
                 scale_factor,
                 add_offset,
@@ -86,19 +87,19 @@ impl OmFileWriterArray {
                 data_type.to_c(),
                 dimensions.as_ptr(),
                 chunks.as_ptr(),
-                dimensions.len(),
+                dimensions.len() as u64,
                 lut_chunk_element_count,
             )
         };
         assert_eq!(error, OmError_t_ERROR_OK, "OmEncoder_init failed");
 
-        let n_chunks = unsafe { OmEncoder_countChunks(&encoder) } as usize;
+        let n_chunks = unsafe { om_encoder_count_chunks(&encoder) } as usize;
         let compressed_chunk_buffer_size =
-            unsafe { OmEncoder_compressedChunkBufferSize(&encoder) } as usize;
-        let chunk_buffer_size = unsafe { OmEncoder_chunkBufferSize(&encoder) } as usize;
+            unsafe { om_encoder_compressed_chunk_buffer_size(&encoder) };
+        let chunk_buffer_size = unsafe { om_encoder_chunk_buffer_size(&encoder) } as usize;
 
         let chunk_buffer = vec![0u8; chunk_buffer_size];
-        let look_up_table = vec![0usize; n_chunks + 1];
+        let look_up_table = vec![0u64; n_chunks + 1];
 
         Self {
             look_up_table,
@@ -119,31 +120,33 @@ impl OmFileWriterArray {
     pub fn write_data<FileHandle: OmFileWriterBackend>(
         &mut self,
         array: &[f32],
-        array_dimensions: &[usize],
+        array_dimensions: &[u64],
         array_read: &[Range<usize>],
         file_handle: &mut FileHandle,
         buffer: &mut OmWriteBuffer,
     ) -> Result<(), OmFilesRsError> {
-        let array_size: usize = array_dimensions.iter().product::<usize>();
-        assert_eq!(array.len(), array_size);
+        let array_size: u64 = array_dimensions.iter().product::<u64>();
+        assert_eq!(array.len() as u64, array_size);
 
-        let array_offset: Vec<usize> = array_read.iter().map(|r| r.start).collect();
-        let array_count: Vec<usize> = array_read.iter().map(|r| (r.end - r.start)).collect();
+        let array_offset: Vec<u64> = array_read.iter().map(|r| r.start as u64).collect();
+        let array_count: Vec<u64> = array_read
+            .iter()
+            .map(|r| (r.end as u64 - r.start as u64))
+            .collect();
 
         buffer.reallocate(self.compressed_chunk_buffer_size * 4);
 
         let number_of_chunks_in_array =
-            unsafe { OmEncoder_countChunksInArray(&mut self.encoder, array_count.as_ptr()) }
-                as usize;
+            unsafe { om_encoder_count_chunks_in_array(&mut self.encoder, array_count.as_ptr()) };
 
         if self.chunk_index == 0 {
-            self.look_up_table[self.chunk_index] = buffer.total_bytes_written;
+            self.look_up_table[self.chunk_index as usize] = buffer.total_bytes_written;
         }
 
         for chunk_offset in 0..number_of_chunks_in_array {
             assert!(buffer.remaining_capacity() >= self.compressed_chunk_buffer_size);
             let bytes_written = unsafe {
-                OmEncoder_compressChunk(
+                om_encoder_compress_chunk(
                     &mut self.encoder,
                     array.as_ptr() as *const c_void,
                     array_dimensions.as_ptr(),
@@ -154,11 +157,11 @@ impl OmFileWriterArray {
                     buffer.buffer_at_write_position().as_mut_ptr(),
                     self.chunk_buffer.as_mut_ptr(),
                 )
-            } as usize;
+            };
 
             buffer.increment_write_position(bytes_written);
 
-            self.look_up_table[self.chunk_index + 1] = buffer.total_bytes_written;
+            self.look_up_table[(self.chunk_index + 1) as usize] = buffer.total_bytes_written;
             self.chunk_index += 1;
 
             if buffer.remaining_capacity() < self.compressed_chunk_buffer_size {
@@ -170,25 +173,25 @@ impl OmFileWriterArray {
     }
 
     /// Compress the lookup table and write it to the output buffer.
-    pub fn write_lut(&mut self, buffer: &mut OmWriteBuffer) -> usize {
+    pub fn write_lut(&mut self, buffer: &mut OmWriteBuffer) -> u64 {
         let buffer_size = unsafe {
-            OmEncoder_lutBufferSize(
+            om_encoder_lut_buffer_size(
                 &mut self.encoder,
                 self.look_up_table.as_ptr(),
-                self.look_up_table.len(),
+                self.look_up_table.len() as u64,
             )
-        } as usize;
+        };
         buffer.reallocate(buffer_size);
 
         let compressed_lut_size = unsafe {
-            OmEncoder_compressLut(
+            om_encoder_compress_lut(
                 &mut self.encoder,
                 self.look_up_table.as_ptr(),
-                self.look_up_table.len(),
+                self.look_up_table.len() as u64,
                 buffer.buffer_at_write_position().as_mut_ptr(),
                 buffer_size,
             )
-        } as usize;
+        };
 
         buffer.increment_write_position(compressed_lut_size);
         compressed_lut_size

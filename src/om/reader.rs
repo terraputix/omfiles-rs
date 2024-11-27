@@ -6,14 +6,16 @@ use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
 use crate::om::mmapfile::{MmapFile, Mode};
 use crate::utils::{add_range, divide_range};
-use omfileformatc_rs::{OmCompression_t, OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_init};
+use omfileformatc_rs::{om_decoder_init, OmCompression_t, OmDataType_t_DATA_TYPE_FLOAT};
 use std::fs::File;
 use std::ops::Range;
 
 use super::c_defaults::create_decoder;
+use super::reader2::OmFileReader2;
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
-    pub backend: Backend,
+    pub reader: OmFileReader2<Backend>,
+    // pub backend: Backend,
     pub scalefactor: f32,
     pub compression: CompressionType,
     pub dimensions: Dimensions,
@@ -21,6 +23,10 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     pub fn new(backend: Backend) -> Result<Self, OmFilesRsError> {
+        let reader = OmFileReader2::new(backend, 256);
+
+        let dimensions = reader.get_dimensions();
+        let chunks = reader.get_chunk_dimensions();
         // Fetch header
         backend.pre_read(0, OmHeader::LENGTH)?;
         let bytes = backend.get_bytes(0, OmHeader::LENGTH)?;
@@ -147,10 +153,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
         let mut decoder = create_decoder();
         unsafe {
-            OmDecoder_init(
+            om_decoder_init(
                 &mut decoder,
-                self.scalefactor,
-                0.0, // add_offset
                 self.compression as OmCompression_t,
                 OmDataType_t_DATA_TYPE_FLOAT,
                 2,

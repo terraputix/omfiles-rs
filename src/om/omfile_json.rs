@@ -21,10 +21,10 @@ pub struct OmFileJSONVariable {
     pub name: Option<String>,
 
     /// The dimensions of the file
-    pub dimensions: Vec<usize>,
+    pub dimensions: Vec<u64>,
 
     /// How the dimensions are chunked
-    pub chunks: Vec<usize>,
+    pub chunks: Vec<u64>,
 
     pub dimension_names: Option<Vec<String>>,
 
@@ -40,8 +40,8 @@ pub struct OmFileJSONVariable {
     pub data_type: DataType,
 
     /// The offset position of the beginning of the look up table LUT. The LUT contains then data positions for each chunk
-    pub lut_offset: usize,
+    pub lut_offset: u64,
 
     /// The total size of the compressed LUT.
-    pub lut_size: usize,
+    pub lut_size: u64,
 }

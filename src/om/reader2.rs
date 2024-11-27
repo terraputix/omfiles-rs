@@ -1,28 +1,74 @@
-use omfileformatc_rs::{OmDecoder_init, OmError_t_ERROR_OK};
-use omfileformatc_rs::{OmDecoder_readBufferSize, OmError_string};
+use omfileformatc_rs::{
+    om_decoder_init, om_trailer_read, om_trailer_size, OmError_t_ERROR_OK,
+    OmHeaderType_t_OM_HEADER_LEGACY, OmHeaderType_t_OM_HEADER_READ_TRAILER,
+};
+// use omfileformatc_rs::{OmDecoder_readBufferSize, OmError_string};
 use std::fs::File;
 use std::ops::Range;
+use std::os::raw::c_void;
+use std::ptr::NonNull;
 
 use crate::data_types::{DataType, OmFileDataType};
 use crate::om::c_defaults::create_decoder;
 
 use super::backends::OmFileReaderBackend;
 use super::errors::OmFilesRsError;
-use super::header::OmHeader;
+use super::header::{self, OmHeader};
 use super::mmapfile::{MmapFile, Mode};
 use super::omfile_json::{OmFileJSON, OmFileJSONVariable};
+use omfileformatc_rs::{
+    om_header_size, om_header_type, om_variable_init, OmHeaderType_t_OM_HEADER_INVALID,
+    OmVariable_t,
+};
 
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {
     pub backend: Backend,
-    pub json: OmFileJSON,
+    variable: *const OmVariable_t,
     lut_chunk_element_count: usize,
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
-    pub fn new(backend: Backend, json: OmFileJSON, lut_chunk_element_count: usize) -> Self {
+    pub fn new(backend: Backend, lut_chunk_element_count: usize) -> Self {
+        let header_size = unsafe { om_header_size() };
+        let header_data = backend
+            .get_bytes(0, header_size)
+            .expect("Failed to read header");
+
+        let header_type = unsafe { om_header_type(header_data.as_ptr() as *const c_void) };
+
+        let variable = unsafe {
+            match header_type {
+                OmHeaderType_t_OM_HEADER_LEGACY => {
+                    om_variable_init(header_data.as_ptr() as *const c_void)
+                }
+                OmHeaderType_t_OM_HEADER_READ_TRAILER => {
+                    let file_size = backend.count();
+                    let trailer_size = om_trailer_size();
+                    let trailer_data = backend
+                        .get_bytes(file_size - trailer_size, trailer_size)
+                        .expect("Failed to read trailer");
+                    let position = om_trailer_read(trailer_data.as_ptr() as *const c_void);
+
+                    if position.size == 0 {
+                        panic!("Not a valid OM file");
+                    }
+
+                    let data_variable = backend
+                        .get_bytes(position.offset as usize, position.size as usize)
+                        .expect("Failed to read data variable");
+                    om_variable_init(data_variable.as_ptr() as *const c_void)
+                }
+                OmHeaderType_t_OM_HEADER_INVALID => {
+                    panic!("Not a valid OM file");
+                }
+                _ => {
+                    panic!("Unknown header type");
+                }
+            }
+        };
         Self {
             backend,
-            json,
+            variable,
             lut_chunk_element_count,
         }
     }
