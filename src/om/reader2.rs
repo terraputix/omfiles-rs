@@ -272,15 +272,18 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     // }
 
     /// Read a variable as an array of a dynamic data type.
-    pub fn read<T: OmFileArrayDataType>(
+    pub fn read_into<T: OmFileArrayDataType>(
         &self,
         into: &mut [T],
         dim_read: &[Range<u64>],
         into_cube_offset: &[u64],
         into_cube_dimension: &[u64],
-        io_size_max: u64,
-        io_size_merge: u64,
+        io_size_max: Option<u64>,
+        io_size_merge: Option<u64>,
     ) -> Result<(), OmFilesRsError> {
+        let io_size_max = io_size_max.unwrap_or(65536);
+        let io_size_merge = io_size_merge.unwrap_or(512);
+
         // Verify data type
         if T::DATA_TYPE_ARRAY != self.data_type() {
             return Err(OmFilesRsError::InvalidDataType);
@@ -334,15 +337,15 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
 
     pub fn read_simple(
         &self,
-        dim_read: &[Range<u64>], // Change to u64 to match read method
-        io_size_max: u64,        // Change to u64
-        io_size_merge: u64,      // Change to u64
+        dim_read: &[Range<u64>],
+        io_size_max: Option<u64>,
+        io_size_merge: Option<u64>,
     ) -> Result<Vec<f32>, OmFilesRsError> {
         let out_dims: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
         let n = out_dims.iter().product::<u64>() as usize;
         let mut out = vec![f32::NAN; n];
 
-        self.read::<f32>(
+        self.read_into::<f32>(
             &mut out,
             dim_read,
             &vec![0; dim_read.len()],

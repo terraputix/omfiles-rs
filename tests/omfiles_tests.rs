@@ -910,10 +910,6 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest.om";
     remove_file_if_exists(file);
 
-    // Define dimensions and writer parameters that need to be used in the reader
-    let dims = vec![5, 5];
-    let lut_chunk_element_count = 2;
-
     let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
     let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
     let result4 = Arc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
@@ -936,12 +932,13 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
     // Initialize the reader using the open_file method
-    let reader = OmFileReader2::open_file(read_backend, lut_chunk_element_count)?;
-    let variables = reader.get_variables();
-    let read_var = &variables[0];
+    let read = OmFileReader2::new(read_backend, 2);
+    let dims = read.get_dimensions();
+    // let variables = reader.get_variables();
+    // let read_var = &variables[0];
 
     // Read the entire data back and assert equality
-    let a = read_var.read(&[0..5, 0..5], 0, 0);
+    let a = read.read_simple(&[0..5, 0..5], Some(0), Some(0))?;
     let expected = vec![
         0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
@@ -951,7 +948,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     // Single index checks
     for x in 0..dims[0] {
         for y in 0..dims[1] {
-            let value = read_var.read(&[x..x + 1, y..y + 1], 0, 0);
+            let value = read.read_simple(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
             assert_eq!(value, vec![(x * 5 + y) as f32]);
         }
     }
@@ -960,7 +957,14 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     for x in 0..dims[0] {
         for y in 0..dims[1] {
             let mut r = vec![f32::NAN; 9];
-            read_var.read_into(&mut r, &[x..x + 1, y..y + 1], &[1, 1], &[3, 3], 0, 0);
+            read.read_into(
+                &mut r,
+                &[x..x + 1, y..y + 1],
+                &[1, 1],
+                &[3, 3],
+                Some(0),
+                Some(0),
+            );
             let expected = vec![
                 f32::NAN,
                 f32::NAN,
@@ -979,7 +983,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     // 2x in fast dimension
     for x in 0..dims[0] {
         for y in 0..dims[1] - 1 {
-            let value = read_var.read(&[x..x + 1, y..y + 2], 0, 0);
+            let value = read.read_simple(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
             assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
         }
     }
@@ -987,7 +991,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     // 2x in slow dimension
     for x in 0..dims[0] - 1 {
         for y in 0..dims[1] {
-            let value = read_var.read(&[x..x + 2, y..y + 1], 0, 0);
+            let value = read.read_simple(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
             assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
         }
     }
@@ -995,7 +999,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     // 2x2 region
     for x in 0..dims[0] - 1 {
         for y in 0..dims[1] - 1 {
-            let value = read_var.read(&[x..x + 2, y..y + 2], 0, 0);
+            let value = read.read_simple(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
             assert_eq!(
                 value,
                 vec![
@@ -1011,7 +1015,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     // 3x3 region
     for x in 0..dims[0] - 2 {
         for y in 0..dims[1] - 2 {
-            let value = read_var.read(&[x..x + 3, y..y + 3], 0, 0);
+            let value = read.read_simple(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
             assert_eq!(
                 value,
                 vec![
@@ -1031,7 +1035,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1x5 region
     for x in 0..dims[1] {
-        let value = read_var.read(&[x..x + 1, 0..5], 0, 0);
+        let value = read.read_simple(&[x..x + 1, 0..5], Some(0), Some(0))?;
         let expected = vec![
             (x * 5) as f32,
             (x * 5 + 1) as f32,
@@ -1044,7 +1048,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5x1 region
     for x in 0..dims[0] {
-        let value = read_var.read(&[0..5, x..x + 1], 0, 0);
+        let value = read.read_simple(&[0..5, x..x + 1], Some(0), Some(0))?;
         let expected = vec![
             x as f32,
             (x + 5) as f32,
