@@ -15,7 +15,6 @@ use omfiles_rs::{
 };
 
 use std::{
-    borrow::BorrowMut,
     f32,
     fs::{self, File},
     sync::Arc,
@@ -163,171 +162,115 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-// #[test]
-// fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
-//     let file = "writetest.om";
-//     std::fs::remove_file(file).ok();
+#[test]
+fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
+    let file = "writetest.om";
+    std::fs::remove_file(file).ok();
 
-//     let mut writer = OmFileWriterArray::new(
-//         vec![100, 100, 10],
-//         vec![2, 2, 2],
-//         CompressionType::P4nzdec256,
-//         DataType::Float,
-//         1.0,
-//         0.0,
-//         256,
-//     );
-//     let mut buffer = OmWriteBuffer::new(1);
+    // Set up the writer with the specified dimensions and chunk dimensions
+    let dims = vec![100, 100, 10];
+    let chunk_dimensions = vec![2, 2, 2];
+    let compression = CompressionType::P4nzdec256;
+    let data_type = DataType::Float;
+    let scale_factor = 1.0;
+    let add_offset = 0.0;
+    let lut_chunk_element_count = 256;
 
-//     let mut file_handle = File::create(file)?;
-//     let mut file_handle = file_handle.borrow_mut();
+    // Create the writer
+    let file_handle = File::create(file)?;
+    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut writer = file_writer
+        .prepare_array::<f32>(
+            dims.clone(),
+            chunk_dimensions,
+            compression,
+            scale_factor,
+            add_offset,
+            lut_chunk_element_count,
+        )
+        .expect("Could not prepare writer");
 
-//     let data: Vec<f32> = (0..100000).map(|x| (x % 10000) as f32).collect();
-//     OmFileWriter2::write_header(&mut buffer);
-//     writer.write_data(
-//         &data,
-//         &[100, 100, 10],
-//         &[0..100, 0..100, 0..10],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     let json_variable = writer.compress_lut_and_return_meta(&mut buffer);
-//     let json = OmFileJSON {
-//         variables: vec![json_variable],
-//         some_attributes: None,
-//     };
-//     OmFileWriter2::write_trailer(&mut buffer, &json)?;
+    let data: Vec<f32> = (0..100000).map(|x| (x % 10000) as f32).collect();
+    writer.write_data(&data, None, None, None)?;
 
-//     buffer.write_to_file(&mut file_handle)?;
+    let variable_meta = writer.finalize();
+    let variable = file_writer.write_array(variable_meta, "data", &[])?;
+    file_writer.write_trailer(variable)?;
 
-//     let file_for_reading = File::open(file)?;
-//     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+    let file_for_reading = File::open(file)?;
+    let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-//     let read = OmFileReader2::open_file(read_backend, 256)?;
+    let read = OmFileReader2::new(read_backend, 256);
 
-//     let a1 = read.read_simple(&[50..51, 20..21, 1..2], 65536, 512)?;
-//     assert_eq!(a1, vec![201.0]);
+    let a1 = read.read_simple(&[50..51, 20..21, 1..2], None, None)?;
+    assert_eq!(a1, vec![201.0]);
 
-//     let a = read.read_simple(&[0..100, 0..100, 0..10], 65536, 512)?;
-//     assert_eq!(a.len(), data.len());
-//     let range = 0..100; // a.len() - 100..a.len() - 1
-//     assert_eq!(a[range.clone()], data[range]);
+    let a = read.read_simple(&[0..100, 0..100, 0..10], None, None)?;
+    assert_eq!(a.len(), data.len());
+    let range = 0..100; // a.len() - 100..a.len() - 1
+    assert_eq!(a[range.clone()], data[range]);
 
-//     Ok(())
-// }
+    Ok(())
+}
 
-// #[test]
-// fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
-//     let file = "writetest.om";
-//     remove_file_if_exists(file);
+#[test]
+fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
+    let file = "writetest.om";
+    remove_file_if_exists(file);
 
-//     let mut writer = OmFileWriterArray::new(
-//         vec![5, 5],
-//         vec![2, 2],
-//         CompressionType::P4nzdec256,
-//         DataType::Float,
-//         1.0,
-//         0.0,
-//         256,
-//     );
+    // Set up the writer with the specified dimensions and chunk dimensions
+    let dims = vec![5, 5];
+    let chunk_dimensions = vec![2, 2];
+    let compression = CompressionType::P4nzdec256;
+    let data_type = DataType::Float;
+    let scale_factor = 1.0;
+    let add_offset = 0.0;
+    let lut_chunk_element_count = 256;
 
-//     let mut buffer = OmWriteBuffer::new(1);
+    // Create the writer
+    let file_handle = File::create(file)?;
+    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut writer = file_writer
+        .prepare_array::<f32>(
+            dims.clone(),
+            chunk_dimensions,
+            compression,
+            scale_factor,
+            add_offset,
+            lut_chunk_element_count,
+        )
+        .expect("Could not prepare writer");
 
-//     let mut file_handle = File::create(file)?;
-//     let mut file_handle = file_handle.borrow_mut();
+    // Directly feed individual chunks
+    writer.write_data(&[0.0, 1.0, 5.0, 6.0], Some(&[2, 2]), None, None)?;
+    writer.write_data(&[2.0, 3.0, 7.0, 8.0], Some(&[2, 2]), None, None)?;
+    writer.write_data(&[4.0, 9.0], Some(&[2, 1]), None, None)?;
+    writer.write_data(&[10.0, 11.0, 15.0, 16.0], Some(&[2, 2]), None, None)?;
+    writer.write_data(&[12.0, 13.0, 17.0, 18.0], Some(&[2, 2]), None, None)?;
+    writer.write_data(&[14.0, 19.0], Some(&[2, 1]), None, None)?;
+    writer.write_data(&[20.0, 21.0], Some(&[1, 2]), None, None)?;
+    writer.write_data(&[22.0, 23.0], Some(&[1, 2]), None, None)?;
+    writer.write_data(&[24.0], Some(&[1, 1]), None, None)?;
 
-//     OmFileWriter2::write_header(&mut buffer);
+    let variable_meta = writer.finalize();
+    let variable = file_writer.write_array(variable_meta, "data", &[])?;
+    file_writer.write_trailer(variable)?;
 
-//     // Directly feed individual chunks
-//     writer.write_data(
-//         &[0.0, 1.0, 5.0, 6.0],
-//         &[2, 2],
-//         &[0..2, 0..2],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[2.0, 3.0, 7.0, 8.0],
-//         &[2, 2],
-//         &[0..2, 0..2],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[4.0, 9.0],
-//         &[2, 1],
-//         &[0..2, 0..1],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[10.0, 11.0, 15.0, 16.0],
-//         &[2, 2],
-//         &[0..2, 0..2],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[12.0, 13.0, 17.0, 18.0],
-//         &[2, 2],
-//         &[0..2, 0..2],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[14.0, 19.0],
-//         &[2, 1],
-//         &[0..2, 0..1],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[20.0, 21.0],
-//         &[1, 2],
-//         &[0..1, 0..2],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[22.0, 23.0],
-//         &[1, 2],
-//         &[0..1, 0..2],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
-//     writer.write_data(
-//         &[24.0],
-//         &[1, 1],
-//         &[0..1, 0..1],
-//         &mut file_handle,
-//         &mut buffer,
-//     )?;
+    // test reading
+    let file_for_reading = File::open(file)?;
+    let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-//     let json_variable = writer.compress_lut_and_return_meta(&mut buffer);
-//     let json = OmFileJSON {
-//         variables: vec![json_variable],
-//         some_attributes: None,
-//     };
-//     OmFileWriter2::write_trailer(&mut buffer, &json)?;
-//     buffer.write_to_file(&mut file_handle)?;
+    let read = OmFileReader2::new(read_backend, 256);
 
-//     // test reading
-//     let file_for_reading = File::open(file)?;
-//     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+    let a = read.read_simple(&[0..5, 0..5], None, None)?;
+    let expected = vec![
+        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+        17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+    ];
+    assert_eq!(a, expected);
 
-//     let file = OmFileReader2::open_file(read_backend, 256)?;
-//     let variables = file.get_variables();
-//     let read = &variables[0];
-
-//     let a = read.read(&[0..5, 0..5], 65536, 512);
-//     let expected = vec![
-//         0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-//         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-//     ];
-//     assert_eq!(a, expected);
-
-//     Ok(())
-// }
+    Ok(())
+}
 
 #[test]
 fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
