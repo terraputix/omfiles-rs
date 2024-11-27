@@ -101,14 +101,13 @@ impl OmFileWriter {
                 error: e.to_string(),
             })?;
         }
-        let mut file_handle =
-            File::create(&file_temp).map_err(|e| OmFilesRsError::CannotOpenFile {
-                filename: file_temp.clone(),
-                errno: e.raw_os_error().unwrap_or(0),
-                error: e.to_string(),
-            })?;
+        let file_handle = File::create(&file_temp).map_err(|e| OmFilesRsError::CannotOpenFile {
+            filename: file_temp.clone(),
+            errno: e.raw_os_error().unwrap_or(0),
+            error: e.to_string(),
+        })?;
         self.write(
-            &mut file_handle,
+            &file_handle,
             compression_type,
             scalefactor,
             true,

@@ -73,7 +73,7 @@ pub trait OmFileReaderBackend {
 }
 
 // TODO: fix error names
-impl OmFileWriterBackend for &mut File {
+impl OmFileWriterBackend for &File {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError> {
         self.write_all(data)
             .map_err(|e| OmFilesRsError::CannotOpenFileErrno {

@@ -31,11 +31,11 @@ pub struct OmFileReader2<Backend: OmFileReaderBackend> {
     pub backend: Backend,
     pub variable: *const OmVariable_t,
     /// Number of elements in index LUT chunk. Assumed to be 256 in production files. Only used for testing!
-    pub lut_chunk_element_count: usize,
+    pub lut_chunk_element_count: u64,
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
-    pub fn new(backend: Backend, lut_chunk_element_count: usize) -> Self {
+    pub fn new(backend: Backend, lut_chunk_element_count: u64) -> Self {
         let header_size = unsafe { om_header_size() };
         let header_data = backend
             .get_bytes(0, header_size)
