@@ -1,6 +1,10 @@
 use omfileformatc_rs::{
-    om_decoder_init, om_trailer_read, om_trailer_size, OmError_t_ERROR_OK,
-    OmHeaderType_t_OM_HEADER_LEGACY, OmHeaderType_t_OM_HEADER_READ_TRAILER,
+    om_decoder_init, om_decoder_read_buffer_size, om_error_string, om_trailer_read,
+    om_trailer_size, om_variable_get_add_offset, om_variable_get_child, om_variable_get_chunks,
+    om_variable_get_compression, om_variable_get_dimensions, om_variable_get_name,
+    om_variable_get_number_of_children, om_variable_get_scalar, om_variable_get_scale_factor,
+    om_variable_get_type, OmDecoder_t, OmError_t_ERROR_OK, OmHeaderType_t_OM_HEADER_LEGACY,
+    OmHeaderType_t_OM_HEADER_READ_TRAILER,
 };
 // use omfileformatc_rs::{OmDecoder_readBufferSize, OmError_string};
 use std::fs::File;
@@ -8,7 +12,8 @@ use std::ops::Range;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 
-use crate::data_types::{DataType, OmFileDataType};
+use crate::compression::CompressionType;
+use crate::data_types::{DataType, OmFileArrayDataType, OmFileDataType};
 use crate::om::c_defaults::create_decoder;
 
 use super::backends::OmFileReaderBackend;
@@ -16,14 +21,17 @@ use super::errors::OmFilesRsError;
 use super::header::{self, OmHeader};
 use super::mmapfile::{MmapFile, Mode};
 use super::omfile_json::{OmFileJSON, OmFileJSONVariable};
+use crate::data_types::OmFileScalarDataType;
 use omfileformatc_rs::{
     om_header_size, om_header_type, om_variable_init, OmHeaderType_t_OM_HEADER_INVALID,
     OmVariable_t,
 };
 
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {
+    /// Points to the underlying memory. Needs to remain in scope to keep memory accessible
     pub backend: Backend,
     variable: *const OmVariable_t,
+    /// Number of elements in index LUT chunk. Assumed to be 256 in production files. Only used for testing!
     lut_chunk_element_count: usize,
 }
 
@@ -72,6 +80,91 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             lut_chunk_element_count,
         }
     }
+
+    pub fn data_type(&self) -> DataType {
+        unsafe {
+            DataType::try_from(om_variable_get_type(self.variable) as u8)
+                .expect("Invalid data type")
+        }
+    }
+
+    pub fn compression(&self) -> CompressionType {
+        unsafe {
+            CompressionType::try_from(om_variable_get_compression(self.variable) as u8)
+                .expect("Invalid compression type")
+        }
+    }
+
+    pub fn scale_factor(&self) -> f32 {
+        unsafe { om_variable_get_scale_factor(self.variable) }
+    }
+
+    pub fn add_offset(&self) -> f32 {
+        unsafe { om_variable_get_add_offset(self.variable) }
+    }
+
+    pub fn get_dimensions(&self) -> &[u64] {
+        unsafe {
+            let dims = om_variable_get_dimensions(self.variable);
+            std::slice::from_raw_parts(dims.values, dims.count as usize)
+        }
+    }
+
+    pub fn get_chunk_dimensions(&self) -> &[u64] {
+        unsafe {
+            let chunks = om_variable_get_chunks(self.variable);
+            std::slice::from_raw_parts(chunks.values, chunks.count as usize)
+        }
+    }
+
+    pub fn get_name(&self) -> Option<String> {
+        unsafe {
+            let name = om_variable_get_name(self.variable);
+            if name.size == 0 {
+                return None;
+            }
+            let bytes = std::slice::from_raw_parts(name.value as *const u8, name.size as usize);
+            String::from_utf8(bytes.to_vec()).ok()
+        }
+    }
+
+    pub fn number_of_children(&self) -> u32 {
+        unsafe { om_variable_get_number_of_children(self.variable) }
+    }
+
+    pub fn get_child(&self, index: i32) -> Option<Self> {
+        unsafe {
+            let child = om_variable_get_child(self.variable, index);
+            if child.size == 0 {
+                return None;
+            }
+            let data_child = self
+                .backend
+                .get_bytes(child.offset as usize, child.size as usize)
+                .expect("Failed to read child data");
+            let child_variable = om_variable_init(data_child.as_ptr() as *const c_void);
+            Some(Self {
+                backend: self.backend.clone(),
+                variable: child_variable,
+                lut_chunk_element_count: self.lut_chunk_element_count,
+            })
+        }
+    }
+
+    pub fn read_scalar<T: OmFileScalarDataType>(&self) -> Option<T> {
+        if T::DATA_TYPE_SCALAR != self.data_type() {
+            return None;
+        }
+        let mut value = T::default();
+        unsafe {
+            if om_variable_get_scalar(self.variable, &mut value as *mut T as *mut c_void)
+                != OmError_t_ERROR_OK
+            {
+                return None;
+            }
+        }
+        Some(value)
+    }
 }
 
 impl OmFileReader2<MmapFile> {
@@ -100,127 +193,143 @@ impl OmFileReader2<MmapFile> {
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
-    pub fn open_file(
-        backend: Backend,
-        lut_chunk_element_count: usize,
-    ) -> Result<Self, OmFilesRsError> {
-        let header_bytes = backend.get_bytes(0, 3)?;
+    // pub fn open_file(
+    //     backend: Backend,
+    //     lut_chunk_element_count: usize,
+    // ) -> Result<Self, OmFilesRsError> {
+    //     let header_bytes = backend.get_bytes(0, 3)?;
 
-        if header_bytes[0] != OmHeader::MAGIC_NUMBER1 || header_bytes[1] != OmHeader::MAGIC_NUMBER2
-        {
-            return Err(OmFilesRsError::NotAOmFile);
-        }
+    //     if header_bytes[0] != OmHeader::MAGIC_NUMBER1 || header_bytes[1] != OmHeader::MAGIC_NUMBER2
+    //     {
+    //         return Err(OmFilesRsError::NotAOmFile);
+    //     }
 
-        // handle versions 1 and 2
-        let version = header_bytes[2];
-        if version == 1 || version == 2 {
-            // backend.pre_read(0, OmHeader::LENGTH)?;
-            let header_bytes = backend.get_bytes(0, OmHeader::LENGTH)?;
-            let header = OmHeader::from_bytes(&header_bytes)?;
-            let variable = OmFileJSONVariable {
-                name: Some("data".to_string()),
-                dimensions: vec![header.dim0, header.dim1],
-                chunks: vec![header.chunk0, header.chunk1],
-                dimension_names: None,
-                scalefactor: header.scalefactor,
-                add_offset: 0.0,
-                compression: header.compression, // TODO: avoid type cast
-                data_type: DataType::Float,
-                lut_offset: OmHeader::LENGTH,
-                lut_size: 8,
-            };
-            let json = OmFileJSON {
-                variables: vec![variable],
-                some_attributes: None,
-            };
-            return Ok(OmFileReader2 {
-                backend,
-                json,
-                lut_chunk_element_count: 1,
-            });
-        }
+    //     // handle versions 1 and 2
+    //     let version = header_bytes[2];
+    //     if version == 1 || version == 2 {
+    //         // backend.pre_read(0, OmHeader::LENGTH)?;
+    //         let header_bytes = backend.get_bytes(0, OmHeader::LENGTH)?;
+    //         let header = OmHeader::from_bytes(&header_bytes)?;
+    //         let variable = OmFileJSONVariable {
+    //             name: Some("data".to_string()),
+    //             dimensions: vec![header.dim0, header.dim1],
+    //             chunks: vec![header.chunk0, header.chunk1],
+    //             dimension_names: None,
+    //             scalefactor: header.scalefactor,
+    //             add_offset: 0.0,
+    //             compression: header.compression, // TODO: avoid type cast
+    //             data_type: DataType::Float,
+    //             lut_offset: OmHeader::LENGTH as u64,
+    //             lut_size: 8,
+    //         };
+    //         let json = OmFileJSON {
+    //             variables: vec![variable],
+    //             some_attributes: None,
+    //         };
+    //         return Ok(OmFileReader2 {
+    //             backend,
+    //             json,
+    //             lut_chunk_element_count: 1,
+    //         });
+    //     }
 
-        if version != 3 {
-            return Err(OmFilesRsError::UnknownVersion(version));
-        }
+    //     if version != 3 {
+    //         return Err(OmFilesRsError::UnknownVersion(version));
+    //     }
 
-        let file_size = backend.count();
-        backend.pre_read(file_size - 8, 8)?;
-        let json_length_bytes = backend.get_bytes(file_size - 8, 8)?;
-        let json_length = u64::from_le_bytes(
-            json_length_bytes
-                .try_into()
-                .expect("Slice with incorrect length"),
-        ) as usize;
+    //     let file_size = backend.count();
+    //     backend.pre_read(file_size - 8, 8)?;
+    //     let json_length_bytes = backend.get_bytes(file_size - 8, 8)?;
+    //     let json_length = u64::from_le_bytes(
+    //         json_length_bytes
+    //             .try_into()
+    //             .expect("Slice with incorrect length"),
+    //     ) as usize;
 
-        // backend.pre_read(file_size - 8 - json_length, json_length)?;
-        let json_data = backend.get_bytes(file_size - 8 - json_length, json_length)?;
+    //     // backend.pre_read(file_size - 8 - json_length, json_length)?;
+    //     let json_data = backend.get_bytes(file_size - 8 - json_length, json_length)?;
 
-        let json: OmFileJSON = serde_json::from_slice(json_data).expect("Failed to parse JSON");
-        Ok(OmFileReader2 {
-            backend,
-            json,
-            lut_chunk_element_count,
-        })
-    }
+    //     let json: OmFileJSON = serde_json::from_slice(json_data).expect("Failed to parse JSON");
+    //     Ok(OmFileReader2 {
+    //         backend,
+    //         json,
+    //         lut_chunk_element_count,
+    //     })
+    // }
 
-    /// Get all variables combined with a reference to the file handle to keep it open.
-    pub fn get_variables(&self) -> Vec<OmFileVariableReader<Backend>> {
-        self.json
-            .variables
-            .iter()
-            .map(|variable| OmFileVariableReader {
-                backend: &self.backend,
-                variable: variable.clone(),
-                lut_chunk_element_count: self.lut_chunk_element_count,
-            })
-            .collect()
-    }
+    // /// Get all variables combined with a reference to the file handle to keep it open.
+    // pub fn get_variables(&self) -> Vec<OmFileVariableReader<Backend>> {
+    //     self.json
+    //         .variables
+    //         .iter()
+    //         .map(|variable| OmFileVariableReader {
+    //             backend: &self.backend,
+    //             variable: variable.clone(),
+    //             lut_chunk_element_count: self.lut_chunk_element_count,
+    //         })
+    //         .collect()
+    // }
 
-    pub fn read(
+    /// Read a variable as an array of a dynamic data type.
+    pub fn read<T: OmFileArrayDataType>(
         &self,
-        into: &mut [f32],
-        dim_read: &[Range<usize>],
-        into_cube_offset: &[usize],
-        into_cube_dimension: &[usize],
-        io_size_max: usize,
-        io_size_merge: usize,
+        into: &mut [T],
+        dim_read: &[Range<u64>],
+        into_cube_offset: &[u64],
+        into_cube_dimension: &[u64],
+        io_size_max: u64,
+        io_size_merge: u64,
     ) -> Result<(), OmFilesRsError> {
-        let v = &self.json.variables[0];
-        let n_dimensions = v.dimensions.len();
-        assert_eq!(dim_read.len(), n_dimensions);
+        // Verify data type
+        if T::DATA_TYPE_ARRAY != self.data_type() {
+            return Err(OmFilesRsError::InvalidDataType);
+        }
+
+        let n_dimensions = dim_read.len();
+
+        // Validate dimension counts
         assert_eq!(into_cube_offset.len(), n_dimensions);
         assert_eq!(into_cube_dimension.len(), n_dimensions);
 
-        let read_offset: Vec<usize> = dim_read.iter().map(|r| r.start).collect();
-        let read_count: Vec<usize> = dim_read.iter().map(|r| r.end - r.start).collect();
+        // Prepare read parameters
+        let read_offset: Vec<u64> = dim_read.iter().map(|r| r.start).collect();
+        let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
 
-        let mut decoder = create_decoder();
-        unsafe {
-            OmDecoder_init(
+        // Initialize decoder
+        let mut decoder = unsafe { std::mem::zeroed::<OmDecoder_t>() };
+        let error = unsafe {
+            om_decoder_init(
                 &mut decoder,
-                v.scalefactor,
-                v.add_offset,
-                v.compression.to_c(),
-                v.data_type.to_c(),
-                v.dimensions.len(),
-                v.dimensions.as_ptr(),
-                v.chunks.as_ptr(),
+                self.variable,
+                n_dimensions as u64,
                 read_offset.as_ptr(),
                 read_count.as_ptr(),
                 into_cube_offset.as_ptr(),
                 into_cube_dimension.as_ptr(),
-                v.lut_size,
-                self.lut_chunk_element_count,
-                v.lut_offset,
+                self.lut_chunk_element_count as u64,
                 io_size_merge,
                 io_size_max,
-            );
+            )
+        };
+
+        if error != OmError_t_ERROR_OK {
+            let error_str = unsafe {
+                let ptr = om_error_string(error);
+                std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
+            };
+            return Err(OmFilesRsError::DecoderError(error_str));
         }
 
-        let chunk_buffer_size = unsafe { OmDecoder_readBufferSize(&decoder) };
-        let mut chunk_buffer = vec![0u8; chunk_buffer_size as usize];
-        self.backend.decode(&decoder, into, &mut chunk_buffer)?;
+        // Allocate chunk buffer
+        let chunk_buffer_size = unsafe { om_decoder_read_buffer_size(&decoder) };
+        let chunk_buffer = unsafe { Vec::with_capacity(chunk_buffer_size as usize) };
+
+        // Perform decoding
+        self.backend.decode(
+            &mut decoder,
+            into,
+            chunk_buffer.as_ptr() as *mut std::ffi::c_void,
+        )?;
 
         Ok(())
     }

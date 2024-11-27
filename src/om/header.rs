@@ -7,10 +7,10 @@ pub struct OmHeader {
     pub version: u8,
     pub compression: CompressionType,
     pub scalefactor: f32,
-    pub dim0: usize,
-    pub dim1: usize,
-    pub chunk0: usize,
-    pub chunk1: usize,
+    pub dim0: u64,
+    pub dim1: u64,
+    pub chunk0: u64,
+    pub chunk1: u64,
 }
 
 impl OmHeader {
@@ -34,10 +34,10 @@ impl OmHeader {
         let compression = CompressionType::try_from(bytes[3])?;
 
         let scalefactor = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
-        let dim0 = usize::from_le_bytes(bytes[8..16].try_into().unwrap());
-        let dim1 = usize::from_le_bytes(bytes[16..24].try_into().unwrap());
-        let chunk0 = usize::from_le_bytes(bytes[24..32].try_into().unwrap());
-        let chunk1 = usize::from_le_bytes(bytes[32..40].try_into().unwrap());
+        let dim0 = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+        let dim1 = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
+        let chunk0 = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
+        let chunk1 = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
 
         let value = Self {
             magic_number1,

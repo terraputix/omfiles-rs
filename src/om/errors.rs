@@ -45,6 +45,8 @@ pub enum OmFilesRsError {
         error: i32,
     },
     InvalidCompressionType,
+    InvalidDataType,
+    DecoderError(String),
     TryingToWriteToReadOnlyFile,
     UnknownVersion(u8),
 }
@@ -142,6 +144,12 @@ impl std::fmt::Display for OmFilesRsError {
             }
             OmFilesRsError::UnknownVersion(v) => {
                 write!(f, "Unknown version {}", v)
+            }
+            OmFilesRsError::InvalidDataType => {
+                write!(f, "Invalid data type")
+            }
+            OmFilesRsError::DecoderError(e) => {
+                write!(f, "Decoder error {}", e)
             }
         }
     }
