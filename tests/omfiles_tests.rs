@@ -733,7 +733,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     let data_type = DataType::Float;
     let scale_factor = 1.0;
     let add_offset = 0.0;
-    let lut_chunk_element_count = 2;
+    let lut_chunk_element_count = 2usize;
 
     // Initialize the writer
     let mut writer = OmFileWriterArray::new(
@@ -743,7 +743,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
         data_type,
         scale_factor,
         add_offset,
-        lut_chunk_element_count,
+        lut_chunk_element_count as u64,
     );
 
     // Initialize the write buffer with a capacity of 1
@@ -783,7 +783,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
     // Initialize the reader using the open_file method
-    let reader = OmFileReader2::open_file(read_backend, lut_chunk_element_count)?;
+    let read = OmFileReader2::new(read_backend, lut_chunk_element_count);
     let variables = reader.get_variables();
     let read_var = &variables[0];
 
