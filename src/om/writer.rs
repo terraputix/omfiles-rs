@@ -183,7 +183,7 @@ pub struct OmFileWriterState<Backend: OmFileWriterBackend> {
     /// Stores all byte offsets where our compressed chunks start.
     /// Later, we want to decompress chunk 1234 and know it starts at
     /// byte offset 5346545.
-    chunk_offset_bytes: Vec<usize>,
+    chunk_offset_bytes: Vec<u64>,
 }
 
 impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
@@ -221,13 +221,13 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
             dimensions,
             compression,
             scalefactor,
-            read_buffer: AlignToSixtyFour::new(buffer_size),
-            write_buffer: AlignToSixtyFour::new(std::cmp::max(1024 * 1024, buffer_size)),
+            read_buffer: AlignToSixtyFour::new(buffer_size as usize),
+            write_buffer: AlignToSixtyFour::new(std::cmp::max(1024 * 1024, buffer_size as usize)),
             bytes_written_since_last_flush: 0,
             write_buffer_pos: 0,
             fsync_flush_size: if fsync { Some(32 * 1024 * 1024) } else { None },
             c0: 0,
-            chunk_offset_bytes: Vec::with_capacity(chunk_offset_length),
+            chunk_offset_bytes: Vec::with_capacity(chunk_offset_length as usize),
         })
     }
 
@@ -238,10 +238,10 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
             version: OmHeader::VERSION,
             compression: self.compression,
             scalefactor: self.scalefactor,
-            dim0: self.dimensions.dim0,
-            dim1: self.dimensions.dim1,
-            chunk0: self.dimensions.chunk0,
-            chunk1: self.dimensions.chunk1,
+            dim0: self.dimensions.dim0 as u64,
+            dim1: self.dimensions.dim1 as u64,
+            chunk0: self.dimensions.chunk0 as u64,
+            chunk1: self.dimensions.chunk1 as u64,
         };
 
         // write the header to the file
@@ -250,7 +250,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
 
         // write empty chunk offset table
         // TODO: Wouldn't using usize make some problems if files are shared between 32 and 64 bit systems?
-        let zero_bytes = vec![0; self.dimensions.chunk_offset_length()];
+        let zero_bytes = vec![0; self.dimensions.chunk_offset_length() as usize];
         self.backend.write(&zero_bytes)?;
 
         Ok(())
@@ -259,11 +259,11 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
     pub fn write_tail(&mut self) -> Result<(), OmFilesRsError> {
         // write remaining data from buffer
         self.backend
-            .write(&self.write_buffer[..self.write_buffer_pos])?;
+            .write(&self.write_buffer[..self.write_buffer_pos as usize])?;
 
         // write trailing byte to allow the encoder to read with 256 bit alignment
         let trailing_bytes = p4nenc256_bound(0, 4);
-        let trailing_data = vec![0; trailing_bytes];
+        let trailing_data = vec![0; trailing_bytes as usize];
         self.backend.write(&trailing_data)?;
 
         let chunk_offset_bytes = as_bytes(self.chunk_offset_bytes.as_slice());
@@ -352,7 +352,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
 
         if missing_elements < elements_per_chunk_row {
             // For the last chunk, the number must match exactly
-            if uncompressed_input.len() != missing_elements {
+            if uncompressed_input.len() != missing_elements as usize {
                 return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
             }
         }
@@ -387,8 +387,8 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                     let range_input = start..start + length1;
 
                     for (pos_buffer, pos_input) in range_buffer.zip(range_input) {
-                        let val = uncompressed_input[pos_input];
-                        buffer[pos_buffer] = scaler_conversion(&val);
+                        let val = uncompressed_input[pos_input as usize];
+                        buffer[pos_buffer as usize] = scaler_conversion(&val);
                     }
                 }
                 delta2d_encode_function(length0, length1, &mut buffer);
@@ -398,16 +398,16 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                 // compressed_size : number of bytes written into compressed output buffer out
                 let write_length = compression_function(
                     buffer,
-                    length1 * length0,
-                    self.write_buffer[self.write_buffer_pos..].as_mut(),
+                    (length1 * length0) as usize,
+                    self.write_buffer[self.write_buffer_pos as usize..].as_mut(),
                 );
 
                 // If the write_buffer is too full, write it to the backend
                 // Too full means, that the next compressed chunk may not fit into the buffer
                 self.write_buffer_pos += write_length;
-                if self.write_buffer.len() - self.write_buffer_pos < read_buffer_length {
+                if self.write_buffer.len() - (self.write_buffer_pos as usize) < read_buffer_length {
                     self.backend
-                        .write(&self.write_buffer[..self.write_buffer_pos])?;
+                        .write(&self.write_buffer[..self.write_buffer_pos as usize])?;
                     if let Some(fsync_flush_size) = self.fsync_flush_size {
                         self.bytes_written_since_last_flush += self.write_buffer_pos;
                         if self.bytes_written_since_last_flush >= fsync_flush_size {
@@ -422,7 +422,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
 
                 // Store chunk offset position in our lookup table
                 let previous = *self.chunk_offset_bytes.last().unwrap_or(&0);
-                self.chunk_offset_bytes.push(previous + write_length);
+                self.chunk_offset_bytes.push(previous + write_length as u64);
             }
         }
         self.c0 += n_read_chunks;

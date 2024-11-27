@@ -1,6 +1,6 @@
 use omfileformatc_rs::{
-    OmDecoder_dataRead_t, OmDecoder_indexRead_t, OmDecoder_initDataRead, OmDecoder_initIndexRead,
-    OmDecoder_t, OmEncoder_t, OmRange_t,
+    om_decoder_init_data_read, om_decoder_init_index_read, OmDecoder_dataRead_t,
+    OmDecoder_indexRead_t, OmDecoder_t, OmEncoder_t, OmRange_t,
 };
 
 pub fn create_decoder() -> OmDecoder_t {
@@ -61,7 +61,7 @@ pub fn new_index_read(decoder: &OmDecoder_t) -> OmDecoder_indexRead_t {
             upperBound: 0,
         },
     };
-    unsafe { OmDecoder_initIndexRead(decoder, &mut index_read) };
+    unsafe { om_decoder_init_index_read(decoder, &mut index_read) };
     index_read
 }
 
@@ -82,6 +82,6 @@ pub fn new_data_read(index_read: &OmDecoder_indexRead_t) -> OmDecoder_dataRead_t
             upperBound: 0,
         },
     };
-    unsafe { OmDecoder_initDataRead(&mut data_read, index_read) };
+    unsafe { om_decoder_init_data_read(&mut data_read, index_read) };
     data_read
 }

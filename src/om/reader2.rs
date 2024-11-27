@@ -13,7 +13,7 @@ use std::os::raw::c_void;
 use std::ptr::NonNull;
 
 use crate::compression::CompressionType;
-use crate::data_types::{DataType, OmFileArrayDataType, OmFileDataType};
+use crate::data_types::{DataType, OmFileArrayDataType};
 use crate::om::c_defaults::create_decoder;
 
 use super::backends::OmFileReaderBackend;
@@ -30,9 +30,9 @@ use omfileformatc_rs::{
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {
     /// Points to the underlying memory. Needs to remain in scope to keep memory accessible
     pub backend: Backend,
-    variable: *const OmVariable_t,
+    pub variable: *const OmVariable_t,
     /// Number of elements in index LUT chunk. Assumed to be 256 in production files. Only used for testing!
-    lut_chunk_element_count: usize,
+    pub lut_chunk_element_count: usize,
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
@@ -133,22 +133,23 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     }
 
     pub fn get_child(&self, index: i32) -> Option<Self> {
-        unsafe {
-            let child = om_variable_get_child(self.variable, index);
-            if child.size == 0 {
-                return None;
-            }
-            let data_child = self
-                .backend
-                .get_bytes(child.offset as usize, child.size as usize)
-                .expect("Failed to read child data");
-            let child_variable = om_variable_init(data_child.as_ptr() as *const c_void);
-            Some(Self {
-                backend: self.backend.clone(),
-                variable: child_variable,
-                lut_chunk_element_count: self.lut_chunk_element_count,
-            })
-        }
+        unimplemented!("Need to use RC for backend");
+        // unsafe {
+        //     let child = om_variable_get_child(self.variable, index);
+        //     if child.size == 0 {
+        //         return None;
+        //     }
+        //     let data_child = self
+        //         .backend
+        //         .get_bytes(child.offset as usize, child.size as usize)
+        //         .expect("Failed to read child data");
+        //     let child_variable = om_variable_init(data_child.as_ptr() as *const c_void);
+        //     Some(Self {
+        //         backend: self.backend.clone(),
+        //         variable: child_variable,
+        //         lut_chunk_element_count: self.lut_chunk_element_count,
+        //     })
+        // }
     }
 
     pub fn read_scalar<T: OmFileScalarDataType>(&self) -> Option<T> {
@@ -182,7 +183,7 @@ impl OmFileReader2<MmapFile> {
     pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
         // TODO: Error handling
         let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
-        Self::open_file(mmap, 256) // FIXME
+        Ok(Self::new(mmap, 256)) // FIXME
     }
 
     /// Check if the file was deleted on the file system.
@@ -322,28 +323,26 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
 
         // Allocate chunk buffer
         let chunk_buffer_size = unsafe { om_decoder_read_buffer_size(&decoder) };
-        let chunk_buffer = unsafe { Vec::with_capacity(chunk_buffer_size as usize) };
+        let mut chunk_buffer = Vec::<u8>::with_capacity(chunk_buffer_size as usize);
 
         // Perform decoding
-        self.backend.decode(
-            &mut decoder,
-            into,
-            chunk_buffer.as_ptr() as *mut std::ffi::c_void,
-        )?;
+        self.backend
+            .decode(&mut decoder, into, chunk_buffer.as_mut_slice())?;
 
         Ok(())
     }
 
     pub fn read_simple(
         &self,
-        dim_read: &[Range<usize>],
-        io_size_max: usize,
-        io_size_merge: usize,
+        dim_read: &[Range<u64>], // Change to u64 to match read method
+        io_size_max: u64,        // Change to u64
+        io_size_merge: u64,      // Change to u64
     ) -> Result<Vec<f32>, OmFilesRsError> {
-        let out_dims: Vec<usize> = dim_read.iter().map(|r| r.end - r.start).collect();
-        let n = out_dims.iter().product::<usize>() as usize;
+        let out_dims: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
+        let n = out_dims.iter().product::<u64>() as usize;
         let mut out = vec![f32::NAN; n];
-        self.read(
+
+        self.read::<f32>(
             &mut out,
             dim_read,
             &vec![0; dim_read.len()],
@@ -351,93 +350,94 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             io_size_max,
             io_size_merge,
         )?;
+
         Ok(out)
     }
 }
 
-/// Reader for a single variable, holding a reference to the file handle.
-pub struct OmFileVariableReader<'a, Backend: OmFileReaderBackend> {
-    backend: &'a Backend,
-    variable: OmFileJSONVariable,
-    lut_chunk_element_count: usize,
-}
+// /// Reader for a single variable, holding a reference to the file handle.
+// pub struct OmFileVariableReader<'a, Backend: OmFileReaderBackend> {
+//     backend: &'a Backend,
+//     variable: OmFileJSONVariable,
+//     lut_chunk_element_count: usize,
+// }
 
-impl<'a, Backend: OmFileReaderBackend> OmFileVariableReader<'a, Backend> {
-    /// Read the variable as `f32`.
-    pub fn read(
-        &self,
-        dim_read: &[Range<usize>],
-        io_size_max: usize,
-        io_size_merge: usize,
-    ) -> Vec<f32> {
-        let out_dims: Vec<usize> = dim_read.iter().map(|r| r.end - r.start).collect();
-        let n: usize = out_dims.iter().product();
-        let mut out = vec![f32::NAN; n];
+// impl<'a, Backend: OmFileReaderBackend> OmFileVariableReader<'a, Backend> {
+//     /// Read the variable as `f32`.
+//     pub fn read(
+//         &self,
+//         dim_read: &[Range<usize>],
+//         io_size_max: usize,
+//         io_size_merge: usize,
+//     ) -> Vec<f32> {
+//         let out_dims: Vec<usize> = dim_read.iter().map(|r| r.end - r.start).collect();
+//         let n: usize = out_dims.iter().product();
+//         let mut out = vec![f32::NAN; n];
 
-        self.read_into(
-            &mut out,
-            dim_read,
-            &vec![0; dim_read.len()],
-            &out_dims,
-            io_size_max,
-            io_size_merge,
-        );
-        out
-    }
+//         self.read_into(
+//             &mut out,
+//             dim_read,
+//             &vec![0; dim_read.len()],
+//             &out_dims,
+//             io_size_max,
+//             io_size_merge,
+//         );
+//         out
+//     }
 
-    /// Read a variable from an OM file into the provided buffer.
-    pub fn read_into<OmType: OmFileDataType>(
-        &self,
-        into: &mut [OmType],
-        dim_read: &[Range<usize>],
-        into_cube_offset: &[usize],
-        into_cube_dimension: &[usize],
-        io_size_max: usize,
-        io_size_merge: usize,
-    ) {
-        let n_dimensions = self.variable.dimensions.len();
-        assert_eq!(OmType::DATA_TYPE, self.variable.data_type);
-        assert_eq!(dim_read.len(), n_dimensions);
-        assert_eq!(into_cube_offset.len(), n_dimensions);
-        assert_eq!(into_cube_dimension.len(), n_dimensions);
+//     /// Read a variable from an OM file into the provided buffer.
+//     pub fn read_into<OmType: OmFileDataType>(
+//         &self,
+//         into: &mut [OmType],
+//         dim_read: &[Range<usize>],
+//         into_cube_offset: &[usize],
+//         into_cube_dimension: &[usize],
+//         io_size_max: usize,
+//         io_size_merge: usize,
+//     ) {
+//         let n_dimensions = self.variable.dimensions.len();
+//         assert_eq!(OmType::DATA_TYPE, self.variable.data_type);
+//         assert_eq!(dim_read.len(), n_dimensions);
+//         assert_eq!(into_cube_offset.len(), n_dimensions);
+//         assert_eq!(into_cube_dimension.len(), n_dimensions);
 
-        let read_offset: Vec<usize> = dim_read.iter().map(|r| r.start).collect();
-        let read_count: Vec<usize> = dim_read.iter().map(|r| (r.end - r.start)).collect();
+//         let read_offset: Vec<usize> = dim_read.iter().map(|r| r.start).collect();
+//         let read_count: Vec<usize> = dim_read.iter().map(|r| (r.end - r.start)).collect();
 
-        let mut decoder = create_decoder();
-        let error = unsafe {
-            OmDecoder_init(
-                &mut decoder,
-                self.variable.scalefactor,
-                self.variable.add_offset,
-                self.variable.compression.to_c(),
-                self.variable.data_type.to_c(),
-                n_dimensions,
-                self.variable.dimensions.as_ptr(),
-                self.variable.chunks.as_ptr(),
-                read_offset.as_ptr(),
-                read_count.as_ptr(),
-                into_cube_offset.as_ptr(),
-                into_cube_dimension.as_ptr(),
-                self.variable.lut_size,
-                self.lut_chunk_element_count,
-                self.variable.lut_offset,
-                io_size_merge,
-                io_size_max,
-            )
-        };
-        if error != OmError_t_ERROR_OK {
-            panic!("OmDecoder: {}", unsafe {
-                std::ffi::CStr::from_ptr(OmError_string(error))
-                    .to_string_lossy()
-                    .into_owned()
-            });
-        }
+//         let mut decoder = create_decoder();
+//         let error = unsafe {
+//             OmDecoder_init(
+//                 &mut decoder,
+//                 self.variable.scalefactor,
+//                 self.variable.add_offset,
+//                 self.variable.compression.to_c(),
+//                 self.variable.data_type.to_c(),
+//                 n_dimensions,
+//                 self.variable.dimensions.as_ptr(),
+//                 self.variable.chunks.as_ptr(),
+//                 read_offset.as_ptr(),
+//                 read_count.as_ptr(),
+//                 into_cube_offset.as_ptr(),
+//                 into_cube_dimension.as_ptr(),
+//                 self.variable.lut_size,
+//                 self.lut_chunk_element_count,
+//                 self.variable.lut_offset,
+//                 io_size_merge,
+//                 io_size_max,
+//             )
+//         };
+//         if error != OmError_t_ERROR_OK {
+//             panic!("OmDecoder: {}", unsafe {
+//                 std::ffi::CStr::from_ptr(om_error_string(error))
+//                     .to_string_lossy()
+//                     .into_owned()
+//             });
+//         }
 
-        let chunk_buffer_size = unsafe { OmDecoder_readBufferSize(&mut decoder) } as usize;
-        let mut chunk_buffer = vec![0u8; chunk_buffer_size];
-        self.backend
-            .decode(&mut decoder, into, chunk_buffer.as_mut_slice())
-            .expect("Unexpected error in OmDecoder");
-    }
-}
+//         let chunk_buffer_size = unsafe { om_decoder_read_buffer_size(&mut decoder) } as usize;
+//         let mut chunk_buffer = vec![0u8; chunk_buffer_size];
+//         self.backend
+//             .decode(&mut decoder, into, chunk_buffer.as_mut_slice())
+//             .expect("Unexpected error in OmDecoder");
+//     }
+// }

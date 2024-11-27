@@ -3,7 +3,7 @@ use omfileformatc_rs::{
     OmError_t_ERROR_OK,
 };
 
-use crate::data_types::OmFileDataType;
+use crate::data_types::OmFileArrayDataType;
 use crate::om::c_defaults::new_data_read;
 use crate::om::errors::OmFilesRsError;
 use crate::om::mmapfile::MmapType;
@@ -28,7 +28,7 @@ pub trait OmFileReaderBackend {
     fn pre_read(&self, offset: usize, count: usize) -> Result<(), OmFilesRsError>;
     fn get_bytes(&self, offset: usize, count: usize) -> Result<&[u8], OmFilesRsError>;
 
-    fn decode<OmType: OmFileDataType>(
+    fn decode<OmType: OmFileArrayDataType>(
         &self,
         decoder: &OmDecoder_t,
         into: &mut [OmType],

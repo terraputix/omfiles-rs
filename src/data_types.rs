@@ -68,50 +68,6 @@ impl TryFrom<u8> for DataType {
     }
 }
 
-pub trait OmFileDataType {
-    const DATA_TYPE: DataType;
-}
-
-impl OmFileDataType for i8 {
-    const DATA_TYPE: DataType = DataType::Int8;
-}
-
-impl OmFileDataType for u8 {
-    const DATA_TYPE: DataType = DataType::Uint8;
-}
-
-impl OmFileDataType for i16 {
-    const DATA_TYPE: DataType = DataType::Int16;
-}
-
-impl OmFileDataType for u16 {
-    const DATA_TYPE: DataType = DataType::Uint16;
-}
-
-impl OmFileDataType for i32 {
-    const DATA_TYPE: DataType = DataType::Int32;
-}
-
-impl OmFileDataType for u32 {
-    const DATA_TYPE: DataType = DataType::Uint32;
-}
-
-impl OmFileDataType for i64 {
-    const DATA_TYPE: DataType = DataType::Int64;
-}
-
-impl OmFileDataType for u64 {
-    const DATA_TYPE: DataType = DataType::Uint64;
-}
-
-impl OmFileDataType for f32 {
-    const DATA_TYPE: DataType = DataType::Float;
-}
-
-impl OmFileDataType for f64 {
-    const DATA_TYPE: DataType = DataType::Double;
-}
-
 /// Trait for types that can be stored as arrays in OmFiles
 pub trait OmFileArrayDataType {
     const DATA_TYPE_ARRAY: DataType;
