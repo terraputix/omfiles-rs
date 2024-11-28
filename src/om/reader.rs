@@ -11,6 +11,7 @@ use crate::utils::{add_range, divide_range};
 use omfileformatc_rs::{om_decoder_init, OmError_t_ERROR_OK};
 use std::fs::File;
 use std::ops::Range;
+use std::rc::Rc;
 
 const LEGACY_DIMENSION_COUNT: u64 = 2;
 const LEGACY_IO_SIZE_MERGE: u64 = 4096;
@@ -25,7 +26,7 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     pub fn new(backend: Backend) -> Result<Self, OmFilesRsError> {
-        let reader = OmFileReader2::new(backend, 256)?;
+        let reader = OmFileReader2::new(Rc::new(backend), 256)?;
 
         let dimensions = reader.get_dimensions();
         let chunks = reader.get_chunk_dimensions();
