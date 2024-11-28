@@ -39,7 +39,7 @@ impl Dimensions {
 
     // length of the chunk offset table in bytes
     pub fn chunk_offset_length(&self) -> usize {
-        self.n_chunks() as usize * std::mem::size_of::<usize>()
+        self.n_chunks() * std::mem::size_of::<usize>()
     }
 
     #[inline(always)]
