@@ -1,26 +1,21 @@
+use crate::compression::CompressionType;
+use crate::data_types::OmFileScalarDataType;
+use crate::data_types::{DataType, OmFileArrayDataType};
+use crate::om::backends::OmFileReaderBackend;
+use crate::om::errors::OmFilesRsError;
+use crate::om::mmapfile::{MmapFile, Mode};
 use omfileformatc_rs::{
-    om_decoder_init, om_decoder_read_buffer_size, om_error_string, om_trailer_read,
-    om_trailer_size, om_variable_get_add_offset, om_variable_get_child, om_variable_get_chunks,
-    om_variable_get_compression, om_variable_get_dimensions, om_variable_get_name,
-    om_variable_get_number_of_children, om_variable_get_scalar, om_variable_get_scale_factor,
-    om_variable_get_type, OmDecoder_t, OmError_t_ERROR_OK, OmHeaderType_t_OM_HEADER_LEGACY,
-    OmHeaderType_t_OM_HEADER_READ_TRAILER,
+    om_decoder_init, om_decoder_read_buffer_size, om_error_string, om_header_size, om_header_type,
+    om_trailer_read, om_trailer_size, om_variable_get_add_offset, om_variable_get_child,
+    om_variable_get_chunks, om_variable_get_compression, om_variable_get_dimensions,
+    om_variable_get_name, om_variable_get_number_of_children, om_variable_get_scalar,
+    om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmDecoder_t,
+    OmError_t_ERROR_OK, OmHeaderType_t_OM_HEADER_INVALID, OmHeaderType_t_OM_HEADER_LEGACY,
+    OmHeaderType_t_OM_HEADER_READ_TRAILER, OmVariable_t,
 };
 use std::fs::File;
 use std::ops::Range;
 use std::os::raw::c_void;
-
-use crate::compression::CompressionType;
-use crate::data_types::{DataType, OmFileArrayDataType};
-
-use super::backends::OmFileReaderBackend;
-use super::errors::OmFilesRsError;
-use super::mmapfile::{MmapFile, Mode};
-use crate::data_types::OmFileScalarDataType;
-use omfileformatc_rs::{
-    om_header_size, om_header_type, om_variable_init, OmHeaderType_t_OM_HEADER_INVALID,
-    OmVariable_t,
-};
 
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {
     /// Points to the underlying memory. Needs to remain in scope to keep memory accessible

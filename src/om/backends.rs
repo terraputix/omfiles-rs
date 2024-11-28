@@ -1,18 +1,16 @@
+use crate::data_types::OmFileArrayDataType;
+use crate::om::c_defaults::new_data_read;
+use crate::om::c_defaults::new_index_read;
+use crate::om::errors::OmFilesRsError;
+use crate::om::mmapfile::MmapType;
+use crate::om::mmapfile::{MAdvice, MmapFile};
 use omfileformatc_rs::{
     om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
     OmError_t_ERROR_OK,
 };
-
-use crate::data_types::OmFileArrayDataType;
-use crate::om::c_defaults::new_data_read;
-use crate::om::errors::OmFilesRsError;
-use crate::om::mmapfile::MmapType;
-use crate::om::mmapfile::{MAdvice, MmapFile};
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::raw::c_void;
-
-use super::c_defaults::new_index_read;
 
 pub trait OmFileWriterBackend {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError>;
