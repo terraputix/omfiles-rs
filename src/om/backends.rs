@@ -1,18 +1,14 @@
+use crate::data_types::OmFileArrayDataType;
+use crate::om::c_defaults::{new_data_read, new_index_read};
+use crate::om::errors::OmFilesRsError;
+use crate::om::mmapfile::{MAdvice, MmapFile, MmapType};
 use omfileformatc_rs::{
-    OmDecoder_decodeChunks, OmDecoder_nexDataRead, OmDecoder_nextIndexRead, OmDecoder_t,
+    om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
     OmError_t_ERROR_OK,
 };
-
-use crate::data_types::OmFileDataType;
-use crate::om::c_defaults::new_data_read;
-use crate::om::errors::OmFilesRsError;
-use crate::om::mmapfile::MmapType;
-use crate::om::mmapfile::{MAdvice, MmapFile};
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::raw::c_void;
-
-use super::c_defaults::new_index_read;
 
 pub trait OmFileWriterBackend {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError>;
@@ -28,7 +24,7 @@ pub trait OmFileReaderBackend {
     fn pre_read(&self, offset: usize, count: usize) -> Result<(), OmFilesRsError>;
     fn get_bytes(&self, offset: usize, count: usize) -> Result<&[u8], OmFilesRsError>;
 
-    fn decode<OmType: OmFileDataType>(
+    fn decode<OmType: OmFileArrayDataType>(
         &self,
         decoder: &OmDecoder_t,
         into: &mut [OmType],
@@ -37,7 +33,7 @@ pub trait OmFileReaderBackend {
         let mut index_read = new_index_read(decoder);
         unsafe {
             // Loop over index blocks and read index data
-            while OmDecoder_nextIndexRead(decoder, &mut index_read) {
+            while om_decoder_next_index_read(decoder, &mut index_read) {
                 let index_data =
                     self.get_bytes(index_read.offset as usize, index_read.count as usize)?;
 
@@ -46,7 +42,7 @@ pub trait OmFileReaderBackend {
                 let mut error = OmError_t_ERROR_OK;
 
                 // Loop over data blocks and read compressed data chunks
-                while OmDecoder_nexDataRead(
+                while om_decoder_next_data_read(
                     decoder,
                     &mut data_read,
                     index_data.as_ptr() as *const c_void, // Urgh!
@@ -56,7 +52,7 @@ pub trait OmFileReaderBackend {
                     let data_data =
                         self.get_bytes(data_read.offset as usize, data_read.count as usize)?;
 
-                    OmDecoder_decodeChunks(
+                    om_decoder_decode_chunks(
                         decoder,
                         data_read.chunkIndex,
                         data_data.as_ptr() as *const c_void, // Urgh!
@@ -73,7 +69,7 @@ pub trait OmFileReaderBackend {
 }
 
 // TODO: fix error names
-impl OmFileWriterBackend for &mut File {
+impl OmFileWriterBackend for &File {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError> {
         self.write_all(data)
             .map_err(|e| OmFilesRsError::CannotOpenFileErrno {

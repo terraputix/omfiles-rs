@@ -1,42 +1,50 @@
 use crate::aligned_buffer::as_typed_slice;
 use crate::compression::{p4ndec256_bound, CompressionType};
 use crate::om::backends::OmFileReaderBackend;
+use crate::om::c_defaults::create_decoder;
 use crate::om::dimensions::Dimensions;
 use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
 use crate::om::mmapfile::{MmapFile, Mode};
+use crate::om::reader2::OmFileReader2;
 use crate::utils::{add_range, divide_range};
-use omfileformatc_rs::{OmCompression_t, OmDataType_t_DATA_TYPE_FLOAT, OmDecoder_init};
+use omfileformatc_rs::{om_decoder_init, OmError_t_ERROR_OK};
 use std::fs::File;
 use std::ops::Range;
+use std::rc::Rc;
 
-use super::c_defaults::create_decoder;
+const LEGACY_DIMENSION_COUNT: u64 = 2;
+const LEGACY_IO_SIZE_MERGE: u64 = 4096;
+const LEGACY_IO_SIZE_MAX: u64 = 65536 * 4;
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
-    pub backend: Backend,
-    pub scalefactor: f32,
+    pub reader: OmFileReader2<Backend>,
+    pub scale_factor: f32,
     pub compression: CompressionType,
     pub dimensions: Dimensions,
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     pub fn new(backend: Backend) -> Result<Self, OmFilesRsError> {
-        // Fetch header
-        backend.pre_read(0, OmHeader::LENGTH)?;
-        let bytes = backend.get_bytes(0, OmHeader::LENGTH)?;
-        let header = OmHeader::from_bytes(bytes)?;
+        let reader = OmFileReader2::new(Rc::new(backend), 256)?;
 
-        let dimensions = Dimensions::new(header.dim0, header.dim1, header.chunk0, header.chunk1);
+        let dimensions = reader.get_dimensions();
+        let chunks = reader.get_chunk_dimensions();
+
+        let dimensions = Dimensions::new(
+            dimensions[0] as usize,
+            dimensions[1] as usize,
+            chunks[0] as usize,
+            chunks[1] as usize,
+        );
+        let scale_factor = reader.scale_factor();
+        let compression = reader.compression();
 
         Ok(Self {
-            backend,
+            reader,
             dimensions,
-            scalefactor: header.scalefactor,
-            compression: if header.version == 1 {
-                CompressionType::P4nzdec256
-            } else {
-                header.compression
-            },
+            scale_factor,
+            compression,
         })
     }
 
@@ -45,7 +53,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         dim0_read: Option<Range<usize>>,
         dim1_read: Option<Range<usize>>,
     ) -> Result<(), OmFilesRsError> {
-        if !self.backend.needs_prefetch() {
+        if !self.reader.backend.needs_prefetch() {
             return Ok(());
         }
 
@@ -56,7 +64,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         self.dimensions.check_read_ranges(&dim0_read, &dim1_read)?;
 
         // Fetch chunk table
-        let chunk_table_buffer = self.backend.get_bytes(
+        let chunk_table_buffer = self.reader.backend.get_bytes(
             OmHeader::LENGTH,
             self.dimensions.chunk_offset_length() + OmHeader::LENGTH,
         )?;
@@ -76,7 +84,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             let c1_range = divide_range(&dim1_read, self.dimensions.chunk1);
             let c1_chunks = add_range(&c1_range, c0 * n_dim1_chunks);
 
-            self.backend.prefetch_data(
+            self.reader.backend.prefetch_data(
                 OmHeader::LENGTH
                     + std::cmp::max(c1_chunks.start as isize - 1, 0) as usize
                         * std::mem::size_of::<usize>(),
@@ -97,7 +105,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
                 if new_fetch_start != fetch_end {
                     if fetch_end != 0 {
-                        self.backend
+                        self.reader
+                            .backend
                             .prefetch_data(fetch_start, fetch_end - fetch_start);
                     }
                     fetch_start = new_fetch_start;
@@ -106,7 +115,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             }
         }
 
-        self.backend
+        self.reader
+            .backend
             .prefetch_data(fetch_start, fetch_end - fetch_start);
         Ok(())
     }
@@ -122,59 +132,53 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     ) -> Result<(), OmFilesRsError> {
         self.dimensions.check_read_ranges(&dim0_read, &dim1_read)?;
 
-        let mut ptr = vec![0usize; 12];
+        let mut ptr = vec![0u64; 8];
 
-        // dimensions
-        ptr[0] = self.dimensions.dim0 as usize;
-        ptr[1] = self.dimensions.dim1 as usize;
-        // chunks
-        ptr[2] = self.dimensions.chunk0 as usize;
-        ptr[3] = self.dimensions.chunk1 as usize;
         // read offset
-        ptr[4] = dim0_read.start as usize;
-        ptr[5] = dim1_read.start as usize;
+        ptr[0] = dim0_read.start as u64;
+        ptr[1] = dim1_read.start as u64;
         // read count
-        ptr[6] = dim0_read.len() as usize;
-        ptr[7] = dim1_read.len() as usize;
+        ptr[2] = dim0_read.len() as u64;
+        ptr[3] = dim1_read.len() as u64;
         // cube offset
-        ptr[8] = 0;
-        ptr[9] = array_dim1_range.start as usize;
+        ptr[4] = 0;
+        ptr[5] = array_dim1_range.start as u64;
         // cube dimensions
-        ptr[10] = dim0_read.len() as usize;
-        ptr[11] = array_dim1_length as usize;
+        ptr[6] = dim0_read.len() as u64;
+        ptr[7] = array_dim1_length as u64;
 
         let ptr = ptr.as_mut_ptr();
 
         let mut decoder = create_decoder();
-        unsafe {
-            OmDecoder_init(
+        let error = unsafe {
+            om_decoder_init(
                 &mut decoder,
-                self.scalefactor,
-                0.0, // add_offset
-                self.compression as OmCompression_t,
-                OmDataType_t_DATA_TYPE_FLOAT,
-                2,
+                self.reader.variable,
+                LEGACY_DIMENSION_COUNT,
                 ptr,
                 ptr.add(2),
                 ptr.add(4),
                 ptr.add(6),
-                ptr.add(8),
-                ptr.add(10),
-                8,
-                1,
-                OmHeader::LENGTH,
-                512,
-                65536,
-            );
-            self.backend.decode(&mut decoder, into, chunk_buffer)?;
+                self.reader.lut_chunk_element_count as u64,
+                LEGACY_IO_SIZE_MERGE,
+                LEGACY_IO_SIZE_MAX,
+            )
+        };
+        if error != OmError_t_ERROR_OK {
+            panic!("Error initializing decoder");
         }
+        self.reader
+            .backend
+            .decode(&mut decoder, into, chunk_buffer)?;
 
         Ok(())
     }
 
     pub fn read_all(&mut self) -> Result<Vec<f32>, OmFilesRsError> {
         // Prefetch data
-        self.backend.prefetch_data(0, self.backend.count());
+        self.reader
+            .backend
+            .prefetch_data(0, self.reader.backend.count());
 
         // Create a buffer to hold the data
         let mut buffer = vec![0.0; self.dimensions.dim0 * self.dimensions.dim1];
@@ -276,6 +280,14 @@ impl OmFileReader<MmapFile> {
     /// Check if the file was deleted on the file system.
     /// Linux keeps the file alive as long as some processes have it open.
     pub fn was_deleted(&self) -> bool {
-        self.backend.was_deleted()
+        self.reader.backend.was_deleted()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_dummy() {
+        assert_eq!(1, 1);
     }
 }
