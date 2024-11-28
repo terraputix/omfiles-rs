@@ -4,7 +4,9 @@
     {
       "type": "cargo",
       "command": "build",
-      "problemMatcher": ["$rustc"],
+      "problemMatcher": [
+        "$rustc"
+      ],
       "group": {
         "kind": "build",
         "isDefault": true

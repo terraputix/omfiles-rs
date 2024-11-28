@@ -22,6 +22,7 @@ pub enum OmFilesRsError {
     InvalidCompressionType,
     InvalidDataType,
     DecoderError(String),
+    NotAnOmFile,
 }
 
 impl std::fmt::Display for OmFilesRsError {
@@ -68,6 +69,9 @@ impl std::fmt::Display for OmFilesRsError {
             }
             OmFilesRsError::DecoderError(e) => {
                 write!(f, "Decoder error {}", e)
+            }
+            OmFilesRsError::NotAnOmFile => {
+                write!(f, "Not an OM file")
             }
         }
     }

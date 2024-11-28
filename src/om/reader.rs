@@ -25,7 +25,7 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     pub fn new(backend: Backend) -> Result<Self, OmFilesRsError> {
-        let reader = OmFileReader2::new(backend, 256);
+        let reader = OmFileReader2::new(backend, 256)?;
 
         let dimensions = reader.get_dimensions();
         let chunks = reader.get_chunk_dimensions();
@@ -43,7 +43,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             reader,
             dimensions,
             scale_factor,
-            compression: compression,
+            compression,
         })
     }
 
@@ -280,5 +280,13 @@ impl OmFileReader<MmapFile> {
     /// Linux keeps the file alive as long as some processes have it open.
     pub fn was_deleted(&self) -> bool {
         self.reader.backend.was_deleted()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_dummy() {
+        assert_eq!(1, 1);
     }
 }

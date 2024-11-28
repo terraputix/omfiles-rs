@@ -1,4 +1,4 @@
-use crate::{compression::CompressionType, om::errors::OmFilesRsError};
+use crate::compression::CompressionType;
 
 #[repr(C)]
 pub struct OmHeader {

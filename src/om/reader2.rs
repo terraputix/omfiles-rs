@@ -27,7 +27,7 @@ pub struct OmFileReader2<Backend: OmFileReaderBackend> {
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     #[allow(non_upper_case_globals)]
-    pub fn new(backend: Backend, lut_chunk_element_count: u64) -> Self {
+    pub fn new(backend: Backend, lut_chunk_element_count: u64) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() };
         let header_data = backend
             .get_bytes(0, header_size)
@@ -35,12 +35,12 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
 
         let header_type = unsafe { om_header_type(header_data.as_ptr() as *const c_void) };
 
-        let variable = unsafe {
+        let variable = {
             match header_type {
-                OmHeaderType_t_OM_HEADER_LEGACY => {
+                OmHeaderType_t_OM_HEADER_LEGACY => unsafe {
                     om_variable_init(header_data.as_ptr() as *const c_void)
-                }
-                OmHeaderType_t_OM_HEADER_READ_TRAILER => {
+                },
+                OmHeaderType_t_OM_HEADER_READ_TRAILER => unsafe {
                     let file_size = backend.count();
                     let trailer_size = om_trailer_size();
                     let trailer_data = backend
@@ -49,27 +49,25 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                     let position = om_trailer_read(trailer_data.as_ptr() as *const c_void);
 
                     if position.size == 0 {
-                        panic!("Not a valid OM file");
+                        return Err(OmFilesRsError::NotAnOmFile);
                     }
 
                     let data_variable = backend
                         .get_bytes(position.offset as usize, position.size as usize)
                         .expect("Failed to read data variable");
                     om_variable_init(data_variable.as_ptr() as *const c_void)
-                }
+                },
                 OmHeaderType_t_OM_HEADER_INVALID => {
-                    panic!("Not a valid OM file");
+                    return Err(OmFilesRsError::NotAnOmFile);
                 }
-                _ => {
-                    panic!("Unknown header type");
-                }
+                _ => return Err(OmFilesRsError::NotAnOmFile),
             }
         };
-        Self {
+        Ok(Self {
             backend,
             variable,
             lut_chunk_element_count,
-        }
+        })
     }
 
     pub fn data_type(&self) -> DataType {
@@ -260,7 +258,7 @@ impl OmFileReader2<MmapFile> {
     pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
         // TODO: Error handling
         let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
-        Ok(Self::new(mmap, 256)) // FIXME
+        Self::new(mmap, 256) // FIXME
     }
 
     /// Check if the file was deleted on the file system.
