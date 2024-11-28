@@ -1,6 +1,5 @@
 use crate::compression::CompressionType;
-use crate::data_types::OmFileScalarDataType;
-use crate::data_types::{DataType, OmFileArrayDataType};
+use crate::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::om::backends::OmFileReaderBackend;
 use crate::om::errors::OmFilesRsError;
 use crate::om::mmapfile::{MmapFile, Mode};
