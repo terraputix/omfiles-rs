@@ -6,7 +6,7 @@ pub struct OmHeader {
     pub magic_number2: u8,
     pub version: u8,
     pub compression: CompressionType,
-    pub scalefactor: f32,
+    pub scale_factor: f32,
     pub dim0: u64,
     pub dim1: u64,
     pub chunk0: u64,
@@ -33,7 +33,7 @@ impl OmHeader {
         let version = bytes[2];
         let compression = CompressionType::try_from(bytes[3])?;
 
-        let scalefactor = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        let scale_factor = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
         let dim0 = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
         let dim1 = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
         let chunk0 = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
@@ -44,7 +44,7 @@ impl OmHeader {
             magic_number2,
             version,
             compression,
-            scalefactor,
+            scale_factor,
             dim0,
             dim1,
             chunk0,
@@ -66,13 +66,13 @@ impl OmHeader {
         bytes[2] = self.version;
         bytes[3] = self.compression as u8;
 
-        let scalefactor_bytes = self.scalefactor.to_le_bytes();
+        let scale_factor_bytes = self.scale_factor.to_le_bytes();
         let dim0_bytes = self.dim0.to_le_bytes();
         let dim1_bytes = self.dim1.to_le_bytes();
         let chunk0_bytes = self.chunk0.to_le_bytes();
         let chunk1_bytes = self.chunk1.to_le_bytes();
 
-        bytes[4..8].copy_from_slice(&scalefactor_bytes);
+        bytes[4..8].copy_from_slice(&scale_factor_bytes);
         bytes[8..16].copy_from_slice(&dim0_bytes);
         bytes[16..24].copy_from_slice(&dim1_bytes);
         bytes[24..32].copy_from_slice(&chunk0_bytes);

@@ -55,7 +55,7 @@ impl OmFileWriter {
         &self,
         backend: Backend,
         compression_type: CompressionType,
-        scalefactor: f32,
+        scale_factor: f32,
         fsync: bool,
         supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
     ) -> Result<(), OmFilesRsError> {
@@ -66,7 +66,7 @@ impl OmFileWriter {
             self.chunk0,
             self.chunk1,
             compression_type,
-            scalefactor,
+            scale_factor,
             fsync,
         )?;
 
@@ -84,7 +84,7 @@ impl OmFileWriter {
         &self,
         file: &str,
         compression_type: CompressionType,
-        scalefactor: f32,
+        scale_factor: f32,
         overwrite: bool,
         supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
     ) -> Result<File, OmFilesRsError> {
@@ -109,7 +109,7 @@ impl OmFileWriter {
         self.write(
             &file_handle,
             compression_type,
-            scalefactor,
+            scale_factor,
             true,
             supply_chunk,
         )?;
@@ -125,31 +125,37 @@ impl OmFileWriter {
         &self,
         file: &str,
         compression_type: CompressionType,
-        scalefactor: f32,
+        scale_factor: f32,
         all: &[f32],
         overwrite: bool,
     ) -> Result<File, OmFilesRsError> {
-        self.write_to_file(file, compression_type, scalefactor, overwrite, |_| Ok(all))
+        self.write_to_file(file, compression_type, scale_factor, overwrite, |_| Ok(all))
     }
 
     pub fn write_in_memory<'a>(
         &self,
         compression_type: CompressionType,
-        scalefactor: f32,
+        scale_factor: f32,
         supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
     ) -> Result<InMemoryBackend, OmFilesRsError> {
         let mut data = InMemoryBackend::new(Vec::new());
-        self.write(&mut data, compression_type, scalefactor, true, supply_chunk)?;
+        self.write(
+            &mut data,
+            compression_type,
+            scale_factor,
+            true,
+            supply_chunk,
+        )?;
         Ok(data)
     }
 
     pub fn write_all_in_memory(
         &self,
         compression_type: CompressionType,
-        scalefactor: f32,
+        scale_factor: f32,
         all: &Vec<f32>,
     ) -> Result<InMemoryBackend, OmFilesRsError> {
-        self.write_in_memory(compression_type, scalefactor, |_| Ok(&all))
+        self.write_in_memory(compression_type, scale_factor, |_| Ok(&all))
     }
 }
 
@@ -159,7 +165,7 @@ pub struct OmFileWriterState<Backend: OmFileWriterBackend> {
     pub dimensions: Dimensions,
 
     pub compression: CompressionType,
-    pub scalefactor: f32,
+    pub scale_factor: f32,
 
     /// Buffer where chunks are moved to, before compressing them.
     /// -> Input for compression call
@@ -193,7 +199,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         chunk0: usize,
         chunk1: usize,
         compression: CompressionType,
-        scalefactor: f32,
+        scale_factor: f32,
         fsync: bool,
     ) -> Result<Self, OmFilesRsError> {
         if chunk0 == 0 || chunk1 == 0 || dim0 == 0 || dim1 == 0 {
@@ -219,7 +225,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
             backend,
             dimensions,
             compression,
-            scalefactor,
+            scale_factor,
             read_buffer: AlignToSixtyFour::new(buffer_size as usize),
             write_buffer: AlignToSixtyFour::new(std::cmp::max(1024 * 1024, buffer_size as usize)),
             bytes_written_since_last_flush: 0,
@@ -236,7 +242,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
             magic_number2: OmHeader::MAGIC_NUMBER2,
             version: OmHeader::VERSION,
             compression: self.compression,
-            scalefactor: self.scalefactor,
+            scale_factor: self.scale_factor,
             dim0: self.dimensions.dim0 as u64,
             dim1: self.dimensions.dim1 as u64,
             chunk0: self.dimensions.chunk0 as u64,
@@ -282,14 +288,14 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
     pub fn write(&mut self, uncompressed_input: &[f32]) -> Result<(), OmFilesRsError> {
         match self.compression {
             CompressionType::P4nzdec256 => {
-                let scalefactor = self.scalefactor;
+                let scale_factor = self.scale_factor;
                 self.write_compressed::<i16, _, _, _>(
                     uncompressed_input,
                     |val| {
                         if val.is_nan() {
                             i16::MAX
                         } else {
-                            let scaled = val * scalefactor;
+                            let scaled = val * scale_factor;
                             scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
                         }
                     },
@@ -308,14 +314,14 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                 },
             ),
             CompressionType::P4nzdec256logarithmic => {
-                let scalefactor = self.scalefactor;
+                let scale_factor = self.scale_factor;
                 self.write_compressed::<i16, _, _, _>(
                     uncompressed_input,
                     |val| {
                         if val.is_nan() {
                             i16::MAX
                         } else {
-                            let scaled = (val.log10() + 1.0) * scalefactor;
+                            let scaled = (val.log10() + 1.0) * scale_factor;
                             scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
                         }
                     },

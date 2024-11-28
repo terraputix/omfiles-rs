@@ -1,14 +1,12 @@
 use crate::aligned_buffer::as_typed_slice;
-use crate::compression::{self, p4ndec256_bound, CompressionType};
+use crate::compression::{p4ndec256_bound, CompressionType};
 use crate::om::backends::OmFileReaderBackend;
 use crate::om::dimensions::Dimensions;
 use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
 use crate::om::mmapfile::{MmapFile, Mode};
 use crate::utils::{add_range, divide_range};
-use omfileformatc_rs::{
-    om_decoder_init, OmCompression_t, OmDataType_t_DATA_TYPE_FLOAT, OmError_t_ERROR_OK,
-};
+use omfileformatc_rs::{om_decoder_init, OmError_t_ERROR_OK};
 use std::fs::File;
 use std::ops::Range;
 
@@ -17,8 +15,7 @@ use super::reader2::OmFileReader2;
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub reader: OmFileReader2<Backend>,
-    // pub backend: Backend,
-    pub scalefactor: f32,
+    pub scale_factor: f32,
     pub compression: CompressionType,
     pub dimensions: Dimensions,
 }
@@ -42,7 +39,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         Ok(Self {
             reader,
             dimensions,
-            scalefactor: scale_factor,
+            scale_factor,
             compression: compression,
         })
     }

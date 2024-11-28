@@ -10,7 +10,7 @@ use omfiles_rs::{
         reader::OmFileReader,
         reader2::OmFileReader2,
         writer::OmFileWriter,
-        writer2::{OmFileWriter2, OmFileWriterArray},
+        writer2::OmFileWriter2,
     },
 };
 
@@ -836,7 +836,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
                 &[3, 3],
                 Some(0),
                 Some(0),
-            );
+            )?;
             let expected = vec![
                 f32::NAN,
                 f32::NAN,
