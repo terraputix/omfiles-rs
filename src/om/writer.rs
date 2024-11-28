@@ -321,7 +321,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
                         if val.is_nan() {
                             i16::MAX
                         } else {
-                            let scaled = (val.log10() + 1.0) * scale_factor;
+                            let scaled = (val + 1.0).log10() * scale_factor;
                             scaled.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16
                         }
                     },
