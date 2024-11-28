@@ -16,7 +16,6 @@ use std::{
     f32,
     fs::{self, File},
     rc::Rc,
-    sync::Arc,
 };
 
 #[test]
@@ -131,9 +130,16 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
     let file = "writetest_failing.om";
     remove_file_if_exists(file);
 
-    let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Arc::new((20..30).map(|x| x as f32).collect::<Vec<f32>>());
+    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
+    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
+    let result4 = (20..30).map(|x| x as f32).collect::<Vec<f32>>();
+
+    let supply_chunk = |dim0pos| match dim0pos {
+        0 => Ok(result0.as_slice()),
+        2 => Ok(result2.as_slice()),
+        4 => Ok(result4.as_slice()),
+        _ => panic!("Not expected"),
+    };
 
     // Attempt to write more data than expected and ensure it throws an error
     let result = OmFileWriter::new(5, 5, 2, 2).write_to_file(
@@ -141,12 +147,7 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
         CompressionType::P4nzdec256,
         1.0,
         false,
-        |dim0pos| match dim0pos {
-            0 => Ok(result0.as_slice()),
-            2 => Ok(result2.as_slice()),
-            4 => Ok(result4.as_slice()),
-            _ => panic!("Not expected"),
-        },
+        supply_chunk,
     );
 
     // Ensure that an error was thrown
@@ -795,21 +796,23 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest.om";
     remove_file_if_exists(file);
 
-    let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Arc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
+    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
+    let result4 = (20..25).map(|x| x as f32).collect::<Vec<f32>>();
+
+    let supply_chunk = |dim0pos| match dim0pos {
+        0 => Ok(result0.as_slice()),
+        2 => Ok(result2.as_slice()),
+        4 => Ok(result4.as_slice()),
+        _ => panic!("Not expected"),
+    };
 
     OmFileWriter::new(5, 5, 2, 2).write_to_file(
         file,
         CompressionType::P4nzdec256,
         1.0,
         false,
-        |dim0pos| match dim0pos {
-            0 => Ok(result0.as_slice()),
-            2 => Ok(result2.as_slice()),
-            4 => Ok(result4.as_slice()),
-            _ => panic!("Not expected"),
-        },
+        supply_chunk,
     )?;
 
     // Open the file for reading
@@ -975,21 +978,23 @@ fn test_write() -> Result<(), OmFilesRsError> {
     let file = "writetest.om";
     remove_file_if_exists(file);
 
-    let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Arc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
+    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
+    let result4 = (20..25).map(|x| x as f32).collect::<Vec<f32>>();
+
+    let supply_chunk = |dim0pos| match dim0pos {
+        0 => Ok(result0.as_slice()),
+        2 => Ok(result2.as_slice()),
+        4 => Ok(result4.as_slice()),
+        _ => panic!("Not expected"),
+    };
 
     OmFileWriter::new(5, 5, 2, 2).write_to_file(
         file,
         CompressionType::P4nzdec256,
         1.0,
         false,
-        |dim0pos| match dim0pos {
-            0 => Ok(result0.as_slice()),
-            2 => Ok(result2.as_slice()),
-            4 => Ok(result4.as_slice()),
-            _ => panic!("Not expected"),
-        },
+        supply_chunk,
     )?;
 
     let read = OmFileReader::from_file(file)?;
@@ -1125,21 +1130,23 @@ fn test_write_fpx() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest_fpx.om";
     remove_file_if_exists(file);
 
-    let result0 = Arc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Arc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Arc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
+    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
+    let result4 = (20..25).map(|x| x as f32).collect::<Vec<f32>>();
+
+    let supply_chunk = |dim0pos| match dim0pos {
+        0 => Ok(result0.as_slice()),
+        2 => Ok(result2.as_slice()),
+        4 => Ok(result4.as_slice()),
+        _ => panic!("Not expected"),
+    };
 
     OmFileWriter::new(5, 5, 2, 2).write_to_file(
         file,
         CompressionType::Fpxdec32,
         1.0,
         false,
-        |dim0pos| match dim0pos {
-            0 => Ok(result0.as_slice()),
-            2 => Ok(result2.as_slice()),
-            4 => Ok(result4.as_slice()),
-            _ => panic!("Not expected"),
-        },
+        supply_chunk,
     )?;
 
     let reader = OmFileReader::from_file(file)?;
