@@ -2,7 +2,6 @@ use omfileformatc_rs::{fpxdec32, fpxenc32};
 
 use omfiles_rs::{
     compression::{p4ndec256_bound, p4nenc256_bound, CompressionType},
-    data_types::DataType,
     om::{
         backends::OmFileReaderBackend,
         errors::OmFilesRsError,
@@ -171,7 +170,6 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     let dims = vec![100, 100, 10];
     let chunk_dimensions = vec![2, 2, 2];
     let compression = CompressionType::P4nzdec256;
-    let data_type = DataType::Float;
     let scale_factor = 1.0;
     let add_offset = 0.0;
     let lut_chunk_element_count = 256;
@@ -222,7 +220,6 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
     let compression = CompressionType::P4nzdec256;
-    let data_type = DataType::Float;
     let scale_factor = 1.0;
     let add_offset = 0.0;
     let lut_chunk_element_count = 256;
@@ -281,7 +278,6 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
     let compression = CompressionType::P4nzdec256;
-    let data_type = DataType::Float;
     let scale_factor = 1.0;
     let add_offset = 0.0;
     let lut_chunk_element_count = 256;
@@ -388,7 +384,6 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     let dims = vec![3, 3, 3];
     let chunk_dimensions = vec![2, 2, 2];
     let compression = CompressionType::P4nzdec256;
-    let data_type = DataType::Float;
     let scale_factor = 1.0;
     let add_offset = 0.0;
     let lut_chunk_element_count = 256;
@@ -445,7 +440,6 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
     let compression = CompressionType::P4nzdec256;
-    let data_type = DataType::Float;
     let scale_factor = 1.0;
     let add_offset = 0.0;
     let lut_chunk_element_count = 2u64;
@@ -614,7 +608,6 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
     let compression = CompressionType::P4nzdec256;
-    let data_type = DataType::Float;
     let scale_factor = 1.0;
     let add_offset = 0.0;
     let lut_chunk_element_count = 2u64;
@@ -806,8 +799,6 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize the reader using the open_file method
     let read = OmFileReader2::new(read_backend, 2);
     let dims = read.get_dimensions();
-    // let variables = reader.get_variables();
-    // let read_var = &variables[0];
 
     // Read the entire data back and assert equality
     let a = read.read_simple(&[0..5, 0..5], Some(0), Some(0))?;

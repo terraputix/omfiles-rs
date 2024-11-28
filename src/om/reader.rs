@@ -1,17 +1,20 @@
 use crate::aligned_buffer::as_typed_slice;
 use crate::compression::{p4ndec256_bound, CompressionType};
 use crate::om::backends::OmFileReaderBackend;
+use crate::om::c_defaults::create_decoder;
 use crate::om::dimensions::Dimensions;
 use crate::om::errors::OmFilesRsError;
 use crate::om::header::OmHeader;
 use crate::om::mmapfile::{MmapFile, Mode};
+use crate::om::reader2::OmFileReader2;
 use crate::utils::{add_range, divide_range};
 use omfileformatc_rs::{om_decoder_init, OmError_t_ERROR_OK};
 use std::fs::File;
 use std::ops::Range;
 
-use super::c_defaults::create_decoder;
-use super::reader2::OmFileReader2;
+const LEGACY_DIMENSION_COUNT: u64 = 2;
+const LEGACY_IO_SIZE_MERGE: u64 = 4096;
+const LEGACY_IO_SIZE_MAX: u64 = 65536 * 4;
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub reader: OmFileReader2<Backend>,
@@ -150,14 +153,14 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             om_decoder_init(
                 &mut decoder,
                 self.reader.variable,
-                2,
+                LEGACY_DIMENSION_COUNT,
                 ptr,
                 ptr.add(2),
                 ptr.add(4),
                 ptr.add(6),
                 self.reader.lut_chunk_element_count as u64,
-                512,
-                65536 * 4,
+                LEGACY_IO_SIZE_MERGE,
+                LEGACY_IO_SIZE_MAX,
             )
         };
         if error != OmError_t_ERROR_OK {

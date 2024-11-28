@@ -19,46 +19,6 @@ impl OmHeader {
     pub const VERSION: u8 = 2;
     pub const LENGTH: usize = 40;
 
-    /// Create a new OmHeader from a slice of bytes.
-    ///
-    /// This implementation returns an owned value because the header
-    /// is small an we can just copy it for safety.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, OmFilesRsError> {
-        if bytes.len() != Self::LENGTH {
-            return Err(OmFilesRsError::InvalidHeaderLength);
-        }
-
-        let magic_number1 = bytes[0];
-        let magic_number2 = bytes[1];
-        let version = bytes[2];
-        let compression = CompressionType::try_from(bytes[3])?;
-
-        let scale_factor = f32::from_le_bytes(bytes[4..8].try_into().unwrap());
-        let dim0 = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-        let dim1 = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
-        let chunk0 = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
-        let chunk1 = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
-
-        let value = Self {
-            magic_number1,
-            magic_number2,
-            version,
-            compression,
-            scale_factor,
-            dim0,
-            dim1,
-            chunk0,
-            chunk1,
-        };
-
-        if value.magic_number1 != Self::MAGIC_NUMBER1 || value.magic_number2 != Self::MAGIC_NUMBER2
-        {
-            return Err(OmFilesRsError::NotAOmFile);
-        }
-
-        Ok(value)
-    }
-
     pub fn as_bytes(self) -> [u8; Self::LENGTH] {
         let mut bytes = [0u8; Self::LENGTH];
         bytes[0] = self.magic_number1;

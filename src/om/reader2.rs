@@ -6,19 +6,15 @@ use omfileformatc_rs::{
     om_variable_get_type, OmDecoder_t, OmError_t_ERROR_OK, OmHeaderType_t_OM_HEADER_LEGACY,
     OmHeaderType_t_OM_HEADER_READ_TRAILER,
 };
-// use omfileformatc_rs::{OmDecoder_readBufferSize, OmError_string};
 use std::fs::File;
 use std::ops::Range;
 use std::os::raw::c_void;
-use std::ptr::NonNull;
 
 use crate::compression::CompressionType;
 use crate::data_types::{DataType, OmFileArrayDataType};
-use crate::om::c_defaults::create_decoder;
 
 use super::backends::OmFileReaderBackend;
 use super::errors::OmFilesRsError;
-use super::header::{self, OmHeader};
 use super::mmapfile::{MmapFile, Mode};
 use crate::data_types::OmFileScalarDataType;
 use omfileformatc_rs::{
@@ -35,6 +31,7 @@ pub struct OmFileReader2<Backend: OmFileReaderBackend> {
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
+    #[allow(non_upper_case_globals)]
     pub fn new(backend: Backend, lut_chunk_element_count: u64) -> Self {
         let header_size = unsafe { om_header_size() };
         let header_data = backend
@@ -165,34 +162,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         }
         Some(value)
     }
-}
 
-impl OmFileReader2<MmapFile> {
-    /// Convenience initializer to create an `OmFileReader` from a file path.
-    pub fn from_file(file: &str) -> Result<Self, OmFilesRsError> {
-        let file_handle = File::open(file).map_err(|e| OmFilesRsError::CannotOpenFile {
-            filename: file.to_string(),
-            errno: e.raw_os_error().unwrap_or(0),
-            error: e.to_string(),
-        })?;
-        Self::from_file_handle(file_handle)
-    }
-
-    /// Convenience initializer to create an `OmFileReader` from an existing `FileHandle`.
-    pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
-        // TODO: Error handling
-        let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
-        Ok(Self::new(mmap, 256)) // FIXME
-    }
-
-    /// Check if the file was deleted on the file system.
-    /// Linux keeps the file alive as long as some processes have it open.
-    pub fn was_deleted(&self) -> bool {
-        self.backend.was_deleted()
-    }
-}
-
-impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     /// Read a variable as an array of a dynamic data type.
     pub fn read_into<T: OmFileArrayDataType>(
         &self,
@@ -280,89 +250,27 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     }
 }
 
-// /// Reader for a single variable, holding a reference to the file handle.
-// pub struct OmFileVariableReader<'a, Backend: OmFileReaderBackend> {
-//     backend: &'a Backend,
-//     variable: OmFileJSONVariable,
-//     lut_chunk_element_count: usize,
-// }
+impl OmFileReader2<MmapFile> {
+    /// Convenience initializer to create an `OmFileReader` from a file path.
+    pub fn from_file(file: &str) -> Result<Self, OmFilesRsError> {
+        let file_handle = File::open(file).map_err(|e| OmFilesRsError::CannotOpenFile {
+            filename: file.to_string(),
+            errno: e.raw_os_error().unwrap_or(0),
+            error: e.to_string(),
+        })?;
+        Self::from_file_handle(file_handle)
+    }
 
-// impl<'a, Backend: OmFileReaderBackend> OmFileVariableReader<'a, Backend> {
-//     /// Read the variable as `f32`.
-//     pub fn read(
-//         &self,
-//         dim_read: &[Range<usize>],
-//         io_size_max: usize,
-//         io_size_merge: usize,
-//     ) -> Vec<f32> {
-//         let out_dims: Vec<usize> = dim_read.iter().map(|r| r.end - r.start).collect();
-//         let n: usize = out_dims.iter().product();
-//         let mut out = vec![f32::NAN; n];
+    /// Convenience initializer to create an `OmFileReader` from an existing `FileHandle`.
+    pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
+        // TODO: Error handling
+        let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
+        Ok(Self::new(mmap, 256)) // FIXME
+    }
 
-//         self.read_into(
-//             &mut out,
-//             dim_read,
-//             &vec![0; dim_read.len()],
-//             &out_dims,
-//             io_size_max,
-//             io_size_merge,
-//         );
-//         out
-//     }
-
-//     /// Read a variable from an OM file into the provided buffer.
-//     pub fn read_into<OmType: OmFileDataType>(
-//         &self,
-//         into: &mut [OmType],
-//         dim_read: &[Range<usize>],
-//         into_cube_offset: &[usize],
-//         into_cube_dimension: &[usize],
-//         io_size_max: usize,
-//         io_size_merge: usize,
-//     ) {
-//         let n_dimensions = self.variable.dimensions.len();
-//         assert_eq!(OmType::DATA_TYPE, self.variable.data_type);
-//         assert_eq!(dim_read.len(), n_dimensions);
-//         assert_eq!(into_cube_offset.len(), n_dimensions);
-//         assert_eq!(into_cube_dimension.len(), n_dimensions);
-
-//         let read_offset: Vec<usize> = dim_read.iter().map(|r| r.start).collect();
-//         let read_count: Vec<usize> = dim_read.iter().map(|r| (r.end - r.start)).collect();
-
-//         let mut decoder = create_decoder();
-//         let error = unsafe {
-//             OmDecoder_init(
-//                 &mut decoder,
-//                 self.variable.scalefactor,
-//                 self.variable.add_offset,
-//                 self.variable.compression.to_c(),
-//                 self.variable.data_type.to_c(),
-//                 n_dimensions,
-//                 self.variable.dimensions.as_ptr(),
-//                 self.variable.chunks.as_ptr(),
-//                 read_offset.as_ptr(),
-//                 read_count.as_ptr(),
-//                 into_cube_offset.as_ptr(),
-//                 into_cube_dimension.as_ptr(),
-//                 self.variable.lut_size,
-//                 self.lut_chunk_element_count,
-//                 self.variable.lut_offset,
-//                 io_size_merge,
-//                 io_size_max,
-//             )
-//         };
-//         if error != OmError_t_ERROR_OK {
-//             panic!("OmDecoder: {}", unsafe {
-//                 std::ffi::CStr::from_ptr(om_error_string(error))
-//                     .to_string_lossy()
-//                     .into_owned()
-//             });
-//         }
-
-//         let chunk_buffer_size = unsafe { om_decoder_read_buffer_size(&mut decoder) } as usize;
-//         let mut chunk_buffer = vec![0u8; chunk_buffer_size];
-//         self.backend
-//             .decode(&mut decoder, into, chunk_buffer.as_mut_slice())
-//             .expect("Unexpected error in OmDecoder");
-//     }
-// }
+    /// Check if the file was deleted on the file system.
+    /// Linux keeps the file alive as long as some processes have it open.
+    pub fn was_deleted(&self) -> bool {
+        self.backend.was_deleted()
+    }
+}
