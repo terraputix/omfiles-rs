@@ -66,8 +66,11 @@ fn turbo_pfor_roundtrip() {
 #[test]
 fn test_write_empty_array_throws() -> Result<(), Box<dyn std::error::Error>> {
     let data: Vec<f32> = vec![];
-    let compressed =
-        OmFileWriter::new(0, 0, 0, 0).write_all_in_memory(CompressionType::P4nzdec256, 1.0, &data);
+    let compressed = OmFileWriter::new(0, 0, 0, 0).write_all_in_memory(
+        CompressionType::P4nzdec256,
+        1.0,
+        Rc::new(data),
+    );
     // make sure there was an error and it is of the correct type
     assert!(compressed.is_err());
     let err = compressed.err().unwrap();
@@ -87,7 +90,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
     let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
         CompressionType::P4nzdec256,
         1.0,
-        &data,
+        Rc::new(data),
     )?;
 
     assert_eq!(compressed.count(), 212);
@@ -111,7 +114,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
     let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
         CompressionType::Fpxdec32,
         1.0,
-        &data,
+        Rc::new(data),
     )?;
 
     assert_eq!(compressed.count(), 236);
@@ -130,14 +133,14 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
     let file = "writetest_failing.om";
     remove_file_if_exists(file);
 
-    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
-    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
-    let result4 = (20..30).map(|x| x as f32).collect::<Vec<f32>>();
+    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+    let result4 = Rc::new((20..30).map(|x| x as f32).collect::<Vec<f32>>());
 
     let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.as_slice()),
-        2 => Ok(result2.as_slice()),
-        4 => Ok(result4.as_slice()),
+        0 => Ok(result0.clone()),
+        2 => Ok(result2.clone()),
+        4 => Ok(result4.clone()),
         _ => panic!("Not expected"),
     };
 
@@ -796,14 +799,14 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest.om";
     remove_file_if_exists(file);
 
-    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
-    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
-    let result4 = (20..25).map(|x| x as f32).collect::<Vec<f32>>();
+    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+    let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
     let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.as_slice()),
-        2 => Ok(result2.as_slice()),
-        4 => Ok(result4.as_slice()),
+        0 => Ok(result0.clone()),
+        2 => Ok(result2.clone()),
+        4 => Ok(result4.clone()),
         _ => panic!("Not expected"),
     };
 
@@ -953,14 +956,14 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest_nan.om";
     remove_file_if_exists(file);
 
-    let data: Vec<f32> = (0..(5 * 5)).map(|_| f32::NAN).collect();
+    let data: Rc<Vec<f32>> = Rc::new((0..(5 * 5)).map(|_| f32::NAN).collect());
 
     OmFileWriter::new(5, 5, 5, 5).write_to_file(
         file,
         CompressionType::P4nzdec256,
         1.0,
         false,
-        |_| Ok(data.as_slice()),
+        |_| Ok(data.clone()),
     )?;
 
     let reader = OmFileReader::from_file(file)?;
@@ -978,14 +981,14 @@ fn test_write() -> Result<(), OmFilesRsError> {
     let file = "writetest.om";
     remove_file_if_exists(file);
 
-    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
-    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
-    let result4 = (20..25).map(|x| x as f32).collect::<Vec<f32>>();
+    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+    let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
     let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.as_slice()),
-        2 => Ok(result2.as_slice()),
-        4 => Ok(result4.as_slice()),
+        0 => Ok(result0.clone()),
+        2 => Ok(result2.clone()),
+        4 => Ok(result4.clone()),
         _ => panic!("Not expected"),
     };
 
@@ -1130,14 +1133,14 @@ fn test_write_fpx() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest_fpx.om";
     remove_file_if_exists(file);
 
-    let result0 = (0..10).map(|x| x as f32).collect::<Vec<f32>>();
-    let result2 = (10..20).map(|x| x as f32).collect::<Vec<f32>>();
-    let result4 = (20..25).map(|x| x as f32).collect::<Vec<f32>>();
+    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+    let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
     let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.as_slice()),
-        2 => Ok(result2.as_slice()),
-        4 => Ok(result4.as_slice()),
+        0 => Ok(result0.clone()),
+        2 => Ok(result2.clone()),
+        4 => Ok(result4.clone()),
         _ => panic!("Not expected"),
     };
 

@@ -8,6 +8,7 @@ use crate::om::header::OmHeader;
 use crate::utils::divide_rounded_up;
 use std::fs::File;
 use std::path::Path;
+use std::rc::Rc;
 // use turbo_pfor_sys::{fpxenc32, p4nzenc128v16};
 use omfileformatc_rs::{fpxenc32, p4nzenc128v16};
 
@@ -57,7 +58,7 @@ impl OmFileWriter {
         compression_type: CompressionType,
         scale_factor: f32,
         fsync: bool,
-        supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
+        supply_chunk: impl Fn(usize) -> Result<Rc<Vec<f32>>, OmFilesRsError>,
     ) -> Result<(), OmFilesRsError> {
         let mut state = OmFileWriterState::new(
             backend,
@@ -73,7 +74,7 @@ impl OmFileWriter {
         state.write_header()?;
         while state.c0 < state.dimensions.n_dim0_chunks() {
             let uncompressed_input = supply_chunk(state.c0 * state.dimensions.chunk0)?;
-            state.write(uncompressed_input)?;
+            state.write(&uncompressed_input)?;
         }
         state.write_tail()?;
 
@@ -86,7 +87,7 @@ impl OmFileWriter {
         compression_type: CompressionType,
         scale_factor: f32,
         overwrite: bool,
-        supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
+        supply_chunk: impl Fn(usize) -> Result<Rc<Vec<f32>>, OmFilesRsError>,
     ) -> Result<File, OmFilesRsError> {
         if !overwrite && Path::new(file).exists() {
             return Err(OmFilesRsError::FileExistsAlready {
@@ -126,17 +127,19 @@ impl OmFileWriter {
         file: &str,
         compression_type: CompressionType,
         scale_factor: f32,
-        all: &[f32],
+        all: Rc<Vec<f32>>,
         overwrite: bool,
     ) -> Result<File, OmFilesRsError> {
-        self.write_to_file(file, compression_type, scale_factor, overwrite, |_| Ok(all))
+        self.write_to_file(file, compression_type, scale_factor, overwrite, |_| {
+            Ok(all.clone())
+        })
     }
 
     pub fn write_in_memory<'a>(
         &self,
         compression_type: CompressionType,
         scale_factor: f32,
-        supply_chunk: impl Fn(usize) -> Result<&'a [f32], OmFilesRsError>,
+        supply_chunk: impl Fn(usize) -> Result<Rc<Vec<f32>>, OmFilesRsError>,
     ) -> Result<InMemoryBackend, OmFilesRsError> {
         let mut data = InMemoryBackend::new(Vec::new());
         self.write(
@@ -153,9 +156,9 @@ impl OmFileWriter {
         &self,
         compression_type: CompressionType,
         scale_factor: f32,
-        all: &Vec<f32>,
+        all: Rc<Vec<f32>>,
     ) -> Result<InMemoryBackend, OmFilesRsError> {
-        self.write_in_memory(compression_type, scale_factor, |_| Ok(&all))
+        self.write_in_memory(compression_type, scale_factor, |_| Ok(all.clone()))
     }
 }
 
