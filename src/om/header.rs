@@ -26,17 +26,11 @@ impl OmHeader {
         bytes[2] = self.version;
         bytes[3] = self.compression as u8;
 
-        let scale_factor_bytes = self.scale_factor.to_le_bytes();
-        let dim0_bytes = self.dim0.to_le_bytes();
-        let dim1_bytes = self.dim1.to_le_bytes();
-        let chunk0_bytes = self.chunk0.to_le_bytes();
-        let chunk1_bytes = self.chunk1.to_le_bytes();
-
-        bytes[4..8].copy_from_slice(&scale_factor_bytes);
-        bytes[8..16].copy_from_slice(&dim0_bytes);
-        bytes[16..24].copy_from_slice(&dim1_bytes);
-        bytes[24..32].copy_from_slice(&chunk0_bytes);
-        bytes[32..40].copy_from_slice(&chunk1_bytes);
+        bytes[4..8].copy_from_slice(&self.scale_factor.to_le_bytes());
+        bytes[8..16].copy_from_slice(&self.dim0.to_le_bytes());
+        bytes[16..24].copy_from_slice(&self.dim1.to_le_bytes());
+        bytes[24..32].copy_from_slice(&self.chunk0.to_le_bytes());
+        bytes[32..40].copy_from_slice(&self.chunk1.to_le_bytes());
 
         bytes
     }
