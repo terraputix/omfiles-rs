@@ -1,14 +1,14 @@
 use omfileformatc_rs::{fpxdec32, fpxenc32};
 use omfiles_rs::{
-    compression::{p4ndec256_bound, p4nenc256_bound, CompressionType},
-    om::{
-        backends::OmFileReaderBackend,
+    core::compression::{p4ndec256_bound, p4nenc256_bound, CompressionType},
+    {
+        backend::backends::OmFileReaderBackend,
+        backend::mmapfile::{MmapFile, Mode},
         errors::OmFilesRsError,
-        mmapfile::{MmapFile, Mode},
-        reader::OmFileReader,
-        reader2::OmFileReader2,
-        writer::OmFileWriter,
-        writer2::OmFileWriter2,
+        io::reader::OmFileReader,
+        io::reader2::OmFileReader2,
+        io::writer::OmFileWriter,
+        io::writer2::OmFileWriter2,
     },
 };
 

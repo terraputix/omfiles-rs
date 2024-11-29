@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use omfiles_rs::compression::CompressionType;
-use omfiles_rs::om::reader::OmFileReader;
-use omfiles_rs::om::writer::OmFileWriter;
+use omfiles_rs::core::compression::CompressionType;
+use omfiles_rs::io::reader::OmFileReader;
+use omfiles_rs::io::writer::OmFileWriter;
 use rand::Rng;
 use std::fs;
 use std::rc::Rc;

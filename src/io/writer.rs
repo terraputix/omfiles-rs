@@ -1,10 +1,10 @@
-use crate::aligned_buffer::{as_bytes, as_typed_slice_mut, AlignToSixtyFour};
-use crate::compression::{p4nenc256_bound, CompressionType};
-use crate::delta2d::{delta2d_encode, delta2d_encode_xor};
-use crate::om::backends::{InMemoryBackend, OmFileWriterBackend};
-use crate::om::dimensions::Dimensions;
-use crate::om::errors::OmFilesRsError;
-use crate::om::header::OmHeader;
+use crate::backend::backends::{InMemoryBackend, OmFileWriterBackend};
+use crate::core::compression::{p4nenc256_bound, CompressionType};
+use crate::core::delta2d::{delta2d_encode, delta2d_encode_xor};
+use crate::core::dimensions::Dimensions;
+use crate::core::header::OmHeader;
+use crate::errors::OmFilesRsError;
+use crate::io::aligned_buffer::{as_bytes, as_typed_slice_mut, AlignToSixtyFour};
 use crate::utils::divide_rounded_up;
 use std::fs::File;
 use std::path::Path;

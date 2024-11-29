@@ -1,4 +1,4 @@
-use crate::compression::CompressionType;
+use crate::core::compression::CompressionType;
 
 #[repr(C)]
 pub struct OmHeader {

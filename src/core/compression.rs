@@ -1,7 +1,7 @@
 use omfileformatc_rs::OmCompression_t;
 use serde::{Deserialize, Serialize};
 
-use crate::om::errors::OmFilesRsError;
+use crate::errors::OmFilesRsError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]

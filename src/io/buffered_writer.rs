@@ -1,5 +1,5 @@
-use crate::om::backends::OmFileWriterBackend;
-use crate::om::errors::OmFilesRsError;
+use crate::backend::backends::OmFileWriterBackend;
+use crate::errors::OmFilesRsError;
 
 /// All data is written to a buffer before flushed to a backend
 pub struct OmBufferedWriter<FileHandle: OmFileWriterBackend> {

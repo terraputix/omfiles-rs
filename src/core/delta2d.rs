@@ -1,4 +1,4 @@
-use crate::aligned_buffer::as_typed_slice_mut;
+use crate::io::aligned_buffer::as_typed_slice_mut;
 
 /// Encodes a 2D delta-encoded buffer.
 ///

@@ -1,4 +1,4 @@
-use crate::om::errors::OmFilesRsError;
+use crate::errors::OmFilesRsError;
 use crate::utils::divide_rounded_up;
 use std::ops::Range;
 

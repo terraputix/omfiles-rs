@@ -1,9 +1,9 @@
-use crate::compression::CompressionType;
-use crate::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
-use crate::om::backends::OmFileWriterBackend;
-use crate::om::buffered_writer::OmBufferedWriter;
-use crate::om::c_defaults::create_encoder;
-use crate::om::errors::OmFilesRsError;
+use crate::backend::backends::OmFileWriterBackend;
+use crate::core::c_defaults::create_encoder;
+use crate::core::compression::CompressionType;
+use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
+use crate::errors::OmFilesRsError;
+use crate::io::buffered_writer::OmBufferedWriter;
 use omfileformatc_rs::{
     om_encoder_chunk_buffer_size, om_encoder_compress_chunk, om_encoder_compress_lut,
     om_encoder_compressed_chunk_buffer_size, om_encoder_count_chunks,

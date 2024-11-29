@@ -1,8 +1,8 @@
-use crate::compression::CompressionType;
-use crate::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
-use crate::om::backends::OmFileReaderBackend;
-use crate::om::errors::OmFilesRsError;
-use crate::om::mmapfile::{MmapFile, Mode};
+use crate::backend::backends::OmFileReaderBackend;
+use crate::backend::mmapfile::{MmapFile, Mode};
+use crate::core::compression::CompressionType;
+use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
+use crate::errors::OmFilesRsError;
 use omfileformatc_rs::{
     om_decoder_init, om_decoder_read_buffer_size, om_error_string, om_header_size, om_header_type,
     om_trailer_read, om_trailer_size, om_variable_get_add_offset, om_variable_get_child,
