@@ -9,11 +9,11 @@ crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "testread"
-path = "src/testread.rs"
+path = "src/bin/testread.rs"
 
 [[bin]]
 name = "reformat"
-path = "src/reformat.rs"
+path = "src/bin/reformat.rs"
 
 # some optimizations for binary/library size in release builds
 # compare: https://github.com/johnthagen/min-sized-rust
