@@ -22,7 +22,7 @@ pub trait OmFileReaderBackend {
     fn needs_prefetch(&self) -> bool;
     fn prefetch_data(&self, offset: usize, count: usize);
     fn pre_read(&self, offset: usize, count: usize) -> Result<(), OmFilesRsError>;
-    fn get_bytes(&self, offset: usize, count: usize) -> Result<&[u8], OmFilesRsError>;
+    fn get_bytes(&self, offset: u64, count: u64) -> Result<&[u8], OmFilesRsError>;
 
     fn decode<OmType: OmFileArrayDataType>(
         &self,
@@ -34,8 +34,7 @@ pub trait OmFileReaderBackend {
         unsafe {
             // Loop over index blocks and read index data
             while om_decoder_next_index_read(decoder, &mut index_read) {
-                let index_data =
-                    self.get_bytes(index_read.offset as usize, index_read.count as usize)?;
+                let index_data = self.get_bytes(index_read.offset, index_read.count)?;
 
                 let mut data_read = new_data_read(&index_read);
 
@@ -49,8 +48,7 @@ pub trait OmFileReaderBackend {
                     index_read.count,
                     &mut error,
                 ) {
-                    let data_data =
-                        self.get_bytes(data_read.offset as usize, data_read.count as usize)?;
+                    let data_data = self.get_bytes(data_read.offset, data_read.count)?;
 
                     om_decoder_decode_chunks(
                         decoder,
@@ -122,10 +120,11 @@ impl OmFileReaderBackend for MmapFile {
         Ok(())
     }
 
-    fn get_bytes(&self, offset: usize, count: usize) -> Result<&[u8], OmFilesRsError> {
+    fn get_bytes(&self, offset: u64, count: u64) -> Result<&[u8], OmFilesRsError> {
+        let index_range = (offset as usize)..(offset + count) as usize;
         match self.data {
-            MmapType::ReadOnly(ref mmap) => Ok(&mmap[offset..offset + count]),
-            MmapType::ReadWrite(ref mmap_mut) => Ok(&mmap_mut[offset..offset + count]),
+            MmapType::ReadOnly(ref mmap) => Ok(&mmap[index_range]),
+            MmapType::ReadWrite(ref mmap_mut) => Ok(&mmap_mut[index_range]),
         }
     }
 }
@@ -178,7 +177,8 @@ impl OmFileReaderBackend for InMemoryBackend {
         Ok(())
     }
 
-    fn get_bytes(&self, offset: usize, count: usize) -> Result<&[u8], OmFilesRsError> {
-        Ok(&self.data[offset..offset + count])
+    fn get_bytes(&self, offset: u64, count: u64) -> Result<&[u8], OmFilesRsError> {
+        let index_range = (offset as usize)..(offset + count) as usize;
+        Ok(&self.data[index_range])
     }
 }

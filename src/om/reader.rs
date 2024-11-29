@@ -65,8 +65,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
         // Fetch chunk table
         let chunk_table_buffer = self.reader.backend.get_bytes(
-            OmHeader::LENGTH,
-            self.dimensions.chunk_offset_length() + OmHeader::LENGTH,
+            OmHeader::LENGTH as u64,
+            self.dimensions.chunk_offset_length() + OmHeader::LENGTH as u64,
         )?;
         let chunk_offsets = as_typed_slice::<usize>(chunk_table_buffer);
 

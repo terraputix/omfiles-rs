@@ -257,7 +257,6 @@ impl<Backend: OmFileWriterBackend> OmFileWriterState<Backend> {
         self.backend.write(header_bytes.as_slice())?;
 
         // write empty chunk offset table
-        // TODO: Wouldn't using usize make some problems if files are shared between 32 and 64 bit systems?
         let zero_bytes = vec![0; self.dimensions.chunk_offset_length() as usize];
         self.backend.write(&zero_bytes)?;
 

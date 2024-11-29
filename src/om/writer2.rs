@@ -322,7 +322,7 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
 
         self.buffer
             .increment_write_position(compressed_lut_size as usize);
-        compressed_lut_size as u64
+        compressed_lut_size
     }
 
     /// Finalize the array and return the finalized struct.

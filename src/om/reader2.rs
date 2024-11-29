@@ -28,7 +28,7 @@ pub struct OmFileReader2<Backend: OmFileReaderBackend> {
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     #[allow(non_upper_case_globals)]
     pub fn new(backend: Rc<Backend>, lut_chunk_element_count: u64) -> Result<Self, OmFilesRsError> {
-        let header_size = unsafe { om_header_size() };
+        let header_size = unsafe { om_header_size() } as u64;
         let header_data = backend
             .get_bytes(0, header_size)
             .expect("Failed to read header");
@@ -44,7 +44,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                     let file_size = backend.count();
                     let trailer_size = om_trailer_size();
                     let trailer_data = backend
-                        .get_bytes(file_size - trailer_size, trailer_size)
+                        .get_bytes((file_size - trailer_size) as u64, trailer_size as u64)
                         .expect("Failed to read trailer");
                     let position = om_trailer_read(trailer_data.as_ptr() as *const c_void);
 
@@ -53,7 +53,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                     }
 
                     let data_variable = backend
-                        .get_bytes(position.offset as usize, position.size as usize)
+                        .get_bytes(position.offset, position.size)
                         .expect("Failed to read data variable");
                     om_variable_init(data_variable.as_ptr() as *const c_void)
                 },
@@ -129,7 +129,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             }
             let data_child = self
                 .backend
-                .get_bytes(child.offset as usize, child.size as usize)
+                .get_bytes(child.offset, child.size)
                 .expect("Failed to read child data");
             let child_variable = om_variable_init(data_child.as_ptr() as *const c_void);
             Some(Self {
