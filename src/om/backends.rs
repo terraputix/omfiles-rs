@@ -44,7 +44,7 @@ pub trait OmFileReaderBackend {
                 while om_decoder_next_data_read(
                     decoder,
                     &mut data_read,
-                    index_data.as_ptr() as *const c_void, // Urgh!
+                    index_data.as_ptr() as *const c_void,
                     index_read.count,
                     &mut error,
                 ) {
@@ -53,10 +53,10 @@ pub trait OmFileReaderBackend {
                     om_decoder_decode_chunks(
                         decoder,
                         data_read.chunkIndex,
-                        data_data.as_ptr() as *const c_void, // Urgh!
+                        data_data.as_ptr() as *const c_void,
                         data_read.count,
-                        into.as_mut_ptr() as *mut c_void, // Urgh!
-                        chunk_buffer.as_mut_ptr() as *mut c_void, // Urgh!
+                        into.as_mut_ptr() as *mut c_void,
+                        chunk_buffer.as_mut_ptr() as *mut c_void,
                         &mut error,
                     );
                 }
@@ -66,38 +66,28 @@ pub trait OmFileReaderBackend {
     }
 }
 
-// TODO: fix error names
+fn map_io_error(e: std::io::Error) -> OmFilesRsError {
+    OmFilesRsError::FileWriterError {
+        errno: e.raw_os_error().unwrap_or(0),
+        error: e.to_string(),
+    }
+}
+
 impl OmFileWriterBackend for &File {
     fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError> {
-        self.write_all(data)
-            .map_err(|e| OmFilesRsError::CannotOpenFileErrno {
-                errno: e.raw_os_error().unwrap_or(0),
-                error: e.to_string(),
-            })?;
+        self.write_all(data).map_err(|e| map_io_error(e))?;
         Ok(())
     }
 
     fn write_at(&mut self, data: &[u8], offset: usize) -> Result<(), OmFilesRsError> {
-        self.seek(SeekFrom::Start(offset as u64)).map_err(|e| {
-            OmFilesRsError::CannotOpenFileErrno {
-                errno: e.raw_os_error().unwrap_or(0),
-                error: e.to_string(),
-            }
-        })?;
-        self.write_all(data)
-            .map_err(|e| OmFilesRsError::CannotOpenFileErrno {
-                errno: e.raw_os_error().unwrap_or(0),
-                error: e.to_string(),
-            })?;
+        self.seek(SeekFrom::Start(offset as u64))
+            .map_err(|e| map_io_error(e))?;
+        self.write_all(data).map_err(|e| map_io_error(e))?;
         Ok(())
     }
 
     fn synchronize(&self) -> Result<(), OmFilesRsError> {
-        self.sync_all()
-            .map_err(|e| OmFilesRsError::CannotOpenFileErrno {
-                errno: e.raw_os_error().unwrap_or(0),
-                error: e.to_string(),
-            })?;
+        self.sync_all().map_err(|e| map_io_error(e))?;
         Ok(())
     }
 }
@@ -136,7 +126,7 @@ pub struct InMemoryBackend {
 
 impl InMemoryBackend {
     pub fn new(data: Vec<u8>) -> Self {
-        Self { data: data }
+        Self { data }
     }
 }
 

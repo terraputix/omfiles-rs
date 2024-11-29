@@ -5,7 +5,7 @@ pub enum OmFilesRsError {
         errno: i32,
         error: String,
     },
-    CannotOpenFileErrno {
+    FileWriterError {
         errno: i32,
         error: String,
     },
@@ -39,8 +39,8 @@ impl std::fmt::Display for OmFilesRsError {
                     filename, errno, error
                 )
             }
-            OmFilesRsError::CannotOpenFileErrno { errno, error } => {
-                write!(f, "Cannot open file: errno {}, error: {}", errno, error)
+            OmFilesRsError::FileWriterError { errno, error } => {
+                write!(f, "File writer error: errno {}, error: {}", errno, error)
             }
             OmFilesRsError::ChunkHasWrongNumberOfElements => {
                 write!(f, "Chunk has wrong number of elements")
