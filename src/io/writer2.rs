@@ -73,7 +73,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
                 name.len() as u16,
                 children.len() as u32,
                 children_offsets.as_ptr(),
-                name.as_ptr() as *const i8,
+                name.as_ptr() as *const ::std::os::raw::c_char,
                 T::DATA_TYPE_SCALAR.to_c(),
                 &value as *const T as *const c_void,
             )
@@ -136,7 +136,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
                 name.len() as u16,
                 children.len() as u32,
                 children_offsets.as_ptr(),
-                name.as_ptr() as *const i8,
+                name.as_ptr() as *const ::std::os::raw::c_char,
                 array.data_type.to_c(),
                 array.compression.to_c(),
                 array.scale_factor,
