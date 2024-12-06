@@ -260,12 +260,12 @@ impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
     }
 
     /// Compresses data and writes it to file.
-    pub fn write_data<'b>(
-        &'b mut self,
-        array: &'b [OmType],
-        array_dimensions: Option<&'b [u64]>,
-        array_offset: Option<&'b [u64]>,
-        array_count: Option<&'b [u64]>,
+    pub fn write_data(
+        &mut self,
+        array: &[OmType],
+        array_dimensions: Option<&[u64]>,
+        array_offset: Option<&[u64]>,
+        array_count: Option<&[u64]>,
     ) -> Result<(), OmFilesRsError> {
         let array_dimensions = array_dimensions.unwrap_or(&self.dimensions);
         let default_offset = vec![0; array_dimensions.len()];
