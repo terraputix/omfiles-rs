@@ -71,7 +71,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         self.buffer.align_to_64_bytes()?;
         let offset = self.buffer.total_bytes_written as u64;
 
-        self.buffer.reallocate(size as usize)?;
+        self.buffer.reallocate(size)?;
 
         let children_offsets: Vec<u64> = children.iter().map(|c| c.offset).collect();
         let children_sizes: Vec<u64> = children.iter().map(|c| c.size).collect();
@@ -88,8 +88,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
             )
         };
 
-        self.buffer.increment_write_position(size as usize);
-        // WTF suddenly size is usize??
+        self.buffer.increment_write_position(size);
         Ok(OmOffsetSize::new(offset, size as u64))
     }
 
@@ -138,7 +137,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
 
         let offset = self.buffer.total_bytes_written as u64;
 
-        self.buffer.reallocate(size as usize)?;
+        self.buffer.reallocate(size)?;
 
         let children_offsets: Vec<u64> = children.iter().map(|c| c.offset).collect();
         let children_sizes: Vec<u64> = children.iter().map(|c| c.size).collect();
@@ -162,7 +161,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
             )
         };
 
-        self.buffer.increment_write_position(size as usize);
+        self.buffer.increment_write_position(size);
         Ok(OmOffsetSize::new(offset, size as u64))
     }
 
@@ -171,7 +170,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         self.buffer.align_to_64_bytes()?;
 
         let size = unsafe { om_trailer_size() };
-        self.buffer.reallocate(size as usize)?;
+        self.buffer.reallocate(size)?;
         unsafe {
             om_trailer_write(
                 self.buffer.buffer_at_write_position().as_mut_ptr() as *mut c_void,
@@ -179,7 +178,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
                 root_variable.size,
             );
         }
-        self.buffer.increment_write_position(size as usize);
+        self.buffer.increment_write_position(size);
 
         self.buffer.write_to_file()
     }
