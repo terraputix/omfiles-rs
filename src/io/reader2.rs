@@ -1,12 +1,12 @@
 use crate::backend::backends::OmFileReaderBackend;
 use crate::backend::mmapfile::{MmapFile, Mode};
-use crate::core::c_defaults::create_decoder;
+use crate::core::c_defaults::{c_error_string, create_decoder};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
 use omfileformatc_rs::{
-    om_decoder_init, om_decoder_read_buffer_size, om_error_string, om_header_size, om_header_type,
-    om_trailer_read, om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
+    om_decoder_init, om_decoder_read_buffer_size, om_header_size, om_header_type, om_trailer_read,
+    om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
     om_variable_get_children_count, om_variable_get_chunks, om_variable_get_compression,
     om_variable_get_dimensions, om_variable_get_name, om_variable_get_scalar,
     om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmError_t_ERROR_OK,
@@ -208,11 +208,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         };
 
         if error != OmError_t_ERROR_OK {
-            let error_str = unsafe {
-                let ptr = om_error_string(error);
-                std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
-            };
-            return Err(OmFilesRsError::DecoderError(error_str));
+            let error_string = c_error_string(error);
+            return Err(OmFilesRsError::DecoderError(error_string));
         }
 
         // Allocate chunk buffer

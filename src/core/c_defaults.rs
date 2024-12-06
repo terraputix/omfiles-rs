@@ -1,6 +1,6 @@
 use omfileformatc_rs::{
-    om_decoder_init_data_read, om_decoder_init_index_read, OmDecoder_dataRead_t,
-    OmDecoder_indexRead_t, OmDecoder_t, OmEncoder_t, OmRange_t,
+    om_decoder_init_data_read, om_decoder_init_index_read, om_error_string, OmDecoder_dataRead_t,
+    OmDecoder_indexRead_t, OmDecoder_t, OmEncoder_t, OmError_t, OmRange_t,
 };
 
 pub fn create_decoder() -> OmDecoder_t {
@@ -84,4 +84,10 @@ pub fn new_data_read(index_read: &OmDecoder_indexRead_t) -> OmDecoder_dataRead_t
     };
     unsafe { om_decoder_init_data_read(&mut data_read, index_read) };
     data_read
+}
+
+pub fn c_error_string(error: OmError_t) -> String {
+    let ptr = unsafe { om_error_string(error) };
+    let error_string = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() };
+    error_string
 }

@@ -1,5 +1,5 @@
 use crate::backend::mmapfile::{MAdvice, MmapFile, MmapType};
-use crate::core::c_defaults::{new_data_read, new_index_read};
+use crate::core::c_defaults::{c_error_string, new_data_read, new_index_read};
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
 use omfileformatc_rs::{
@@ -50,7 +50,7 @@ pub trait OmFileReaderBackend {
                 ) {
                     let data_data = self.get_bytes(data_read.offset, data_read.count)?;
 
-                    om_decoder_decode_chunks(
+                    if !om_decoder_decode_chunks(
                         decoder,
                         data_read.chunkIndex,
                         data_data.as_ptr() as *const c_void,
@@ -58,7 +58,15 @@ pub trait OmFileReaderBackend {
                         into.as_mut_ptr() as *mut c_void,
                         chunk_buffer.as_mut_ptr() as *mut c_void,
                         &mut error,
-                    );
+                    ) {
+                        let error_string = c_error_string(error);
+
+                        panic!("OmDecoder: {:}", &error_string);
+                    }
+                }
+                if error != OmError_t_ERROR_OK {
+                    let error_string = c_error_string(error);
+                    panic!("OmDecoder: {:}", &error_string);
                 }
             }
         }

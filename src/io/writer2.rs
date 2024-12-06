@@ -13,6 +13,7 @@ use omfileformatc_rs::{
     OmEncoder_t, OmError_t_ERROR_OK,
 };
 use std::borrow::BorrowMut;
+use std::marker::PhantomData;
 use std::os::raw::c_void;
 
 pub struct OmOffsetSize {
@@ -100,7 +101,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         scale_factor: f32,
         add_offset: f32,
         lut_chunk_element_count: u64,
-    ) -> Result<OmFileWriterArray<FileHandle>, OmFilesRsError> {
+    ) -> Result<OmFileWriterArray<T, FileHandle>, OmFilesRsError> {
         let _ = &self.write_header_if_required()?;
 
         Ok(OmFileWriterArray::new(
@@ -184,14 +185,14 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
     }
 }
 
-pub struct OmFileWriterArray<'a, FileHandle: OmFileWriterBackend> {
+pub struct OmFileWriterArray<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend> {
     look_up_table: Vec<u64>,
     encoder: OmEncoder_t,
     chunk_index: u64,
     scale_factor: f32,
     add_offset: f32,
     compression: CompressionType,
-    data_type: DataType,
+    data_type: PhantomData<OmType>,
     dimensions: Vec<u64>,
     chunks: Vec<u64>,
     compressed_chunk_buffer_size: u64,
@@ -199,7 +200,9 @@ pub struct OmFileWriterArray<'a, FileHandle: OmFileWriterBackend> {
     buffer: &'a mut OmBufferedWriter<FileHandle>,
 }
 
-impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
+impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
+    OmFileWriterArray<'a, OmType, FileHandle>
+{
     /// `lut_chunk_element_count` should be 256 for production files.
     pub fn new(
         dimensions: Vec<u64>,
@@ -211,6 +214,8 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
         buffer: &'a mut OmBufferedWriter<FileHandle>,
         lut_chunk_element_count: u64,
     ) -> Self {
+        // Verify OmType matches data_type
+        assert_eq!(OmType::DATA_TYPE_ARRAY, data_type, "Data type mismatch");
         assert_eq!(dimensions.len(), chunk_dimensions.len());
 
         let chunks = chunk_dimensions;
@@ -246,7 +251,7 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
             scale_factor,
             add_offset,
             compression,
-            data_type,
+            data_type: PhantomData,
             dimensions,
             chunks,
             compressed_chunk_buffer_size,
@@ -258,7 +263,7 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
     /// Compresses data and writes it to file.
     pub fn write_data<'b>(
         &'b mut self,
-        array: &'b [f32],
+        array: &'b [OmType],
         array_dimensions: Option<&'b [u64]>,
         array_offset: Option<&'b [u64]>,
         array_count: Option<&'b [u64]>,
@@ -355,17 +360,13 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
             scale_factor: self.scale_factor,
             add_offset: self.add_offset,
             compression: self.compression,
-            data_type: self.data_type,
+            data_type: OmType::DATA_TYPE_ARRAY,
             dimensions: self.dimensions.clone(),
             chunks: self.chunks.clone(),
             lut_size,
             lut_offset,
         }
     }
-}
-
-impl<FileHandle: OmFileWriterBackend> Drop for OmFileWriterArray<'_, FileHandle> {
-    fn drop(&mut self) {}
 }
 
 pub struct OmFileWriterArrayFinalized {
