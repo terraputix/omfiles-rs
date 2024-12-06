@@ -10,13 +10,21 @@ use omfileformatc_rs::{
     om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, om_header_write,
     om_header_write_size, om_trailer_size, om_trailer_write, om_variable_write_numeric_array,
     om_variable_write_numeric_array_size, om_variable_write_scalar, om_variable_write_scalar_size,
-    OmEncoder_t, OmError_t_ERROR_OK, OmOffsetSize_t,
+    OmEncoder_t, OmError_t_ERROR_OK,
 };
 use std::borrow::BorrowMut;
+use std::marker::PhantomData;
 use std::os::raw::c_void;
 
 pub struct OmOffsetSize {
-    pub offset: OmOffsetSize_t,
+    offset: u64,
+    size: u64,
+}
+
+impl OmOffsetSize {
+    pub fn new(offset: u64, size: u64) -> Self {
+        Self { offset, size }
+    }
 }
 
 pub struct OmFileWriter2<FileHandle: OmFileWriterBackend> {
@@ -54,33 +62,34 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         assert!(name.len() <= u16::MAX as usize);
         assert!(children.len() <= u32::MAX as usize);
 
+        let type_scalar = T::DATA_TYPE_SCALAR.to_c();
+
         let size = unsafe {
-            om_variable_write_scalar_size(
-                name.len() as u16,
-                children.len() as u32,
-                T::DATA_TYPE_SCALAR.to_c(),
-            )
+            om_variable_write_scalar_size(name.len() as u16, children.len() as u32, type_scalar)
         };
 
         self.buffer.align_to_64_bytes()?;
-        self.buffer.reallocate(size as usize)?;
+        let offset = self.buffer.total_bytes_written as u64;
 
-        let children_offsets: Vec<OmOffsetSize_t> = children.iter().map(|c| c.offset).collect();
-        let variable = unsafe {
+        self.buffer.reallocate(size)?;
+
+        let children_offsets: Vec<u64> = children.iter().map(|c| c.offset).collect();
+        let children_sizes: Vec<u64> = children.iter().map(|c| c.size).collect();
+        unsafe {
             om_variable_write_scalar(
                 self.buffer.buffer_at_write_position().as_mut_ptr() as *mut c_void,
-                self.buffer.total_bytes_written as u64,
                 name.len() as u16,
                 children.len() as u32,
                 children_offsets.as_ptr(),
+                children_sizes.as_ptr(),
                 name.as_ptr() as *const ::std::os::raw::c_char,
-                T::DATA_TYPE_SCALAR.to_c(),
+                type_scalar,
                 &value as *const T as *const c_void,
             )
         };
 
-        self.buffer.increment_write_position(size as usize);
-        Ok(OmOffsetSize { offset: variable })
+        self.buffer.increment_write_position(size);
+        Ok(OmOffsetSize::new(offset, size as u64))
     }
 
     pub fn prepare_array<T: OmFileArrayDataType>(
@@ -91,7 +100,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         scale_factor: f32,
         add_offset: f32,
         lut_chunk_element_count: u64,
-    ) -> Result<OmFileWriterArray<FileHandle>, OmFilesRsError> {
+    ) -> Result<OmFileWriterArray<T, FileHandle>, OmFilesRsError> {
         let _ = &self.write_header_if_required()?;
 
         Ok(OmFileWriterArray::new(
@@ -114,8 +123,8 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
     ) -> Result<OmOffsetSize, OmFilesRsError> {
         self.write_header_if_required()?;
 
-        assert!(name.len() <= u16::MAX as usize);
-        assert_eq!(array.dimensions.len(), array.chunks.len());
+        debug_assert!(name.len() <= u16::MAX as usize);
+        debug_assert_eq!(array.dimensions.len(), array.chunks.len());
 
         let size = unsafe {
             om_variable_write_numeric_array_size(
@@ -124,18 +133,21 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
                 array.dimensions.len() as u64,
             )
         };
-
         self.buffer.align_to_64_bytes()?;
-        self.buffer.reallocate(size as usize)?;
 
-        let children_offsets: Vec<OmOffsetSize_t> = children.iter().map(|c| c.offset).collect();
-        let variable = unsafe {
+        let offset = self.buffer.total_bytes_written as u64;
+
+        self.buffer.reallocate(size)?;
+
+        let children_offsets: Vec<u64> = children.iter().map(|c| c.offset).collect();
+        let children_sizes: Vec<u64> = children.iter().map(|c| c.size).collect();
+        unsafe {
             om_variable_write_numeric_array(
                 self.buffer.buffer_at_write_position().as_mut_ptr() as *mut c_void,
-                self.buffer.total_bytes_written as u64,
                 name.len() as u16,
                 children.len() as u32,
                 children_offsets.as_ptr(),
+                children_sizes.as_ptr(),
                 name.as_ptr() as *const ::std::os::raw::c_char,
                 array.data_type.to_c(),
                 array.compression.to_c(),
@@ -149,8 +161,8 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
             )
         };
 
-        self.buffer.increment_write_position(size as usize);
-        Ok(OmOffsetSize { offset: variable })
+        self.buffer.increment_write_position(size);
+        Ok(OmOffsetSize::new(offset, size as u64))
     }
 
     pub fn write_trailer(&mut self, root_variable: OmOffsetSize) -> Result<(), OmFilesRsError> {
@@ -158,26 +170,28 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         self.buffer.align_to_64_bytes()?;
 
         let size = unsafe { om_trailer_size() };
-        self.buffer.reallocate(size as usize)?;
+        self.buffer.reallocate(size)?;
         unsafe {
             om_trailer_write(
                 self.buffer.buffer_at_write_position().as_mut_ptr() as *mut c_void,
                 root_variable.offset,
+                root_variable.size,
             );
         }
-        self.buffer.increment_write_position(size as usize);
+        self.buffer.increment_write_position(size);
+
         self.buffer.write_to_file()
     }
 }
 
-pub struct OmFileWriterArray<'a, FileHandle: OmFileWriterBackend> {
+pub struct OmFileWriterArray<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend> {
     look_up_table: Vec<u64>,
     encoder: OmEncoder_t,
     chunk_index: u64,
     scale_factor: f32,
     add_offset: f32,
     compression: CompressionType,
-    data_type: DataType,
+    data_type: PhantomData<OmType>,
     dimensions: Vec<u64>,
     chunks: Vec<u64>,
     compressed_chunk_buffer_size: u64,
@@ -185,7 +199,9 @@ pub struct OmFileWriterArray<'a, FileHandle: OmFileWriterBackend> {
     buffer: &'a mut OmBufferedWriter<FileHandle>,
 }
 
-impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
+impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
+    OmFileWriterArray<'a, OmType, FileHandle>
+{
     /// `lut_chunk_element_count` should be 256 for production files.
     pub fn new(
         dimensions: Vec<u64>,
@@ -197,6 +213,8 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
         buffer: &'a mut OmBufferedWriter<FileHandle>,
         lut_chunk_element_count: u64,
     ) -> Self {
+        // Verify OmType matches data_type
+        assert_eq!(OmType::DATA_TYPE_ARRAY, data_type, "Data type mismatch");
         assert_eq!(dimensions.len(), chunk_dimensions.len());
 
         let chunks = chunk_dimensions;
@@ -232,7 +250,7 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
             scale_factor,
             add_offset,
             compression,
-            data_type,
+            data_type: PhantomData,
             dimensions,
             chunks,
             compressed_chunk_buffer_size,
@@ -241,10 +259,10 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
         }
     }
 
-    /// Compress data and write it to file.
+    /// Compresses data and writes it to file.
     pub fn write_data(
         &mut self,
-        array: &[f32],
+        array: &[OmType],
         array_dimensions: Option<&[u64]>,
         array_offset: Option<&[u64]>,
         array_count: Option<&[u64]>,
@@ -255,7 +273,11 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
         let array_count = array_count.unwrap_or(array_dimensions);
 
         let array_size: u64 = array_dimensions.iter().product::<u64>();
-        assert_eq!(array.len() as u64, array_size);
+        debug_assert_eq!(array.len() as u64, array_size);
+        debug_assert!(array_dimensions
+            .iter()
+            .zip(array_offset.iter().zip(array_count.iter()))
+            .all(|(dim, (offset, count))| offset + count <= *dim));
 
         self.buffer
             .reallocate(self.compressed_chunk_buffer_size as usize * 4)?;
@@ -267,8 +289,14 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
             self.look_up_table[self.chunk_index as usize] = self.buffer.total_bytes_written as u64;
         }
 
+        // This loop could be parallelized. However, the order of chunks must
+        // remain the same in the LUT and final output buffer.
+        // For multithreading, we would need multiple buffers that need to be
+        // copied into the final buffer in the correct order after compression.
         for chunk_offset in 0..number_of_chunks_in_array {
-            assert!(self.buffer.remaining_capacity() >= self.compressed_chunk_buffer_size as usize);
+            self.buffer
+                .reallocate(self.compressed_chunk_buffer_size as usize)?;
+
             let bytes_written = unsafe {
                 om_encoder_compress_chunk(
                     &mut self.encoder,
@@ -288,10 +316,6 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
             self.look_up_table[(self.chunk_index + 1) as usize] =
                 self.buffer.total_bytes_written as u64;
             self.chunk_index += 1;
-
-            if self.buffer.remaining_capacity() < self.compressed_chunk_buffer_size as usize {
-                self.buffer.write_to_file()?;
-            }
         }
 
         Ok(())
@@ -301,11 +325,12 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
     pub fn write_lut(&mut self) -> u64 {
         let buffer_size = unsafe {
             om_encoder_lut_buffer_size(
-                &mut self.encoder,
+                &self.encoder,
                 self.look_up_table.as_ptr(),
                 self.look_up_table.len() as u64,
             )
         };
+
         self.buffer
             .reallocate(buffer_size as usize)
             .expect("Failed to reallocate buffer");
@@ -334,17 +359,13 @@ impl<'a, FileHandle: OmFileWriterBackend> OmFileWriterArray<'a, FileHandle> {
             scale_factor: self.scale_factor,
             add_offset: self.add_offset,
             compression: self.compression,
-            data_type: self.data_type,
+            data_type: OmType::DATA_TYPE_ARRAY,
             dimensions: self.dimensions.clone(),
             chunks: self.chunks.clone(),
             lut_size,
             lut_offset,
         }
     }
-}
-
-impl<FileHandle: OmFileWriterBackend> Drop for OmFileWriterArray<'_, FileHandle> {
-    fn drop(&mut self) {}
 }
 
 pub struct OmFileWriterArrayFinalized {

@@ -13,7 +13,7 @@ use omfiles_rs::{
 };
 
 use std::{
-    f32,
+    f32::{self},
     fs::{self, File},
     rc::Rc,
 };
@@ -261,7 +261,9 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-    let read = OmFileReader2::new(Rc::new(read_backend), 256)?;
+    let backend = Rc::new(read_backend);
+
+    let read = OmFileReader2::new(backend.clone(), 256)?;
 
     let a = read.read_simple(&[0..5, 0..5], None, None)?;
     let expected = vec![
@@ -269,6 +271,32 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
     ];
     assert_eq!(a, expected);
+
+    let count = backend.count() as u64;
+    let bytes = backend.get_bytes(0, count)?;
+
+    // difference on x86 and ARM cause by the underlying compression
+    assert!(
+        bytes
+            == &[
+                79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14,
+                197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0,
+                0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
+                0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0,
+                0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+            ]
+            || bytes
+                == &[
+                    79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242,
+                    64, 14, 197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20,
+                    0, 4, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0,
+                    0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97,
+                    0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0,
+                    0, 0, 0
+                ]
+    );
 
     Ok(())
 }
@@ -450,8 +478,44 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Validate file length and bytes
-    assert_eq!(backend.count(), 240);
+    let count = backend.count();
+    assert_eq!(count, 240);
+    let bytes = backend.get_bytes(0, count as u64)?;
+    assert_eq!(&bytes[0..3], &[79, 77, 3]);
+    assert_eq!(&bytes[3..8], &[0, 3, 34, 140, 2]);
+    // difference on x86 and ARM cause by the underlying compression
+    assert!(&bytes[8..12] == &[2, 3, 114, 1] || &bytes[8..12] == &[2, 3, 114, 141]);
+    assert!(&bytes[12..16] == &[6, 3, 34, 0] || &bytes[12..16] == &[6, 3, 34, 140]);
+
+    assert_eq!(&bytes[16..19], &[8, 194, 2]);
+    assert_eq!(&bytes[19..23], &[18, 5, 226, 3]);
+    assert_eq!(&bytes[23..26], &[20, 198, 33]);
+    assert_eq!(&bytes[26..29], &[24, 194, 2]);
+    assert_eq!(&bytes[29..30], &[26]);
+    assert_eq!(&bytes[30..35], &[3, 3, 37, 199, 45]);
+    assert_eq!(&bytes[35..40], &[0, 0, 0, 0, 0]);
+    assert_eq!(
+        &bytes[40..57],
+        &[5, 4, 5, 0, 0, 0, 0, 0, 82, 9, 188, 0, 105, 110, 116, 51, 50]
+    );
+    assert_eq!(
+        &bytes[65..87],
+        &[4, 6, 0, 0, 0, 0, 0, 0, 0, 0, 64, 42, 129, 103, 65, 100, 111, 117, 98, 108, 101, 0]
+    );
+    assert_eq!(
+        &bytes[88..212],
+        &[
+            20, 0, 4, 0, 2, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 0, 0, 0,
+            0, 40, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0,
+            0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
+            2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97
+        ]
+    );
+    assert_eq!(
+        &bytes[216..240],
+        &[79, 77, 3, 0, 0, 0, 0, 0, 88, 0, 0, 0, 0, 0, 0, 0, 124, 0, 0, 0, 0, 0, 0, 0]
+    );
 
     Ok(())
 }
@@ -491,7 +555,8 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     // Open file for reading
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-    let read = OmFileReader2::new(Rc::new(read_backend), lut_chunk_element_count)?;
+    let backend = Rc::new(read_backend);
+    let read = OmFileReader2::new(backend.clone(), lut_chunk_element_count)?;
 
     // Rest of test remains the same but using read.read_simple() instead of read_var.read()
     let a = read.read_simple(&[0..5, 0..5], None, None)?;
@@ -619,6 +684,20 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
             ]
         );
     }
+
+    let count = backend.count();
+    let bytes = backend.get_bytes(0, count as u64)?;
+    assert_eq!(
+        &bytes,
+        &[
+            79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
+            17, 20, 194, 2, 22, 194, 2, 24, 3, 195, 4, 11, 194, 3, 18, 195, 4, 25, 194, 3, 31, 193,
+            1, 0, 20, 0, 4, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0,
+            0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79,
+            77, 3, 0, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+        ]
+    );
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 use crate::backend::backends::OmFileWriterBackend;
 use crate::errors::OmFilesRsError;
+use crate::utils::divide_rounded_up;
 
 /// All data is written to a buffer before flushed to a backend
 pub struct OmBufferedWriter<FileHandle: OmFileWriterBackend> {
@@ -44,10 +45,8 @@ impl<FileHandle: OmFileWriterBackend> OmBufferedWriter<FileHandle> {
         self.reallocate(bytes_to_pad)?;
 
         // Zero-fill padding bytes
-        for _ in 0..bytes_to_pad {
-            self.buffer[self.write_position] = 0;
-            self.increment_write_position(1);
-        }
+        self.buffer[self.write_position..self.write_position + bytes_to_pad].fill(0);
+        self.increment_write_position(bytes_to_pad);
         Ok(())
     }
 
@@ -79,12 +78,11 @@ impl<FileHandle: OmFileWriterBackend> OmBufferedWriter<FileHandle> {
         }
 
         // Calculate new capacity as multiple of initial capacity
-        let new_capacity = ((minimum_capacity + self.initial_capacity - 1) / self.initial_capacity)
-            * self.initial_capacity;
+        let new_capacity =
+            divide_rounded_up(minimum_capacity, self.initial_capacity) * self.initial_capacity;
 
         // Resize buffer with zeros
         self.buffer.resize(new_capacity, 0);
-        self.buffer.shrink_to(new_capacity);
 
         Ok(())
     }
@@ -96,10 +94,10 @@ impl<FileHandle: OmFileWriterBackend> OmBufferedWriter<FileHandle> {
         }
 
         self.backend.write(&self.buffer[..self.write_position])?;
-        self.reset_write_position();
 
         // Clear buffer contents
-        self.buffer.fill(0);
+        self.buffer[..self.write_position].fill(0);
+        self.reset_write_position();
 
         Ok(())
     }

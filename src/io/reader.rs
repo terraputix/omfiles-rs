@@ -159,7 +159,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                 ptr.add(2),
                 ptr.add(4),
                 ptr.add(6),
-                self.reader.lut_chunk_element_count as u64,
+                self.reader.lut_chunk_element_count,
                 LEGACY_IO_SIZE_MERGE,
                 LEGACY_IO_SIZE_MAX,
             )
