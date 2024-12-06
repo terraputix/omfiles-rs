@@ -13,7 +13,7 @@ use omfiles_rs::{
 };
 
 use std::{
-    f32,
+    f32::{self},
     fs::{self, File},
     rc::Rc,
 };
@@ -1255,6 +1255,58 @@ fn test_write_fpx() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn test_write_data_memory_safety() -> Result<(), Box<dyn std::error::Error>> {
+    let file = "writetest.om";
+    remove_file_if_exists(file);
+
+    // Setup minimal test dimensions
+    let dimensions = vec![100, 10]; // Smaller dimensions for testing
+    let chunks = vec![10, 10]; // Small chunk size
+
+    // Create a test file
+    let file_handle = File::create(file)?;
+    let mut writer = OmFileWriter2::new(&file_handle, 1024); // Smaller buffer for testing
+
+    // Prepare the array with minimal configuration
+    let mut array = writer
+        .prepare_array::<f32>(
+            dimensions.clone(),
+            chunks.clone(),
+            CompressionType::P4nzdec256,
+            1.0, // scale_factor
+            0.0, // add_offset
+            256, // lut_chunk_element_count
+        )
+        .unwrap();
+
+    // Create test data
+    let chunk_size = chunks[0] as usize * chunks[1] as usize;
+
+    // Test writing chunks
+    for chunk_start in (0..dimensions[0]).step_by(chunks[0] as usize) {
+        let chunk_dim_0 = std::cmp::min(chunks[0], dimensions[0] - chunk_start);
+        let chunk_length = std::cmp::min(chunk_size, (chunk_dim_0 * dimensions[1]) as usize);
+        // Create test data for this chunk
+        // let chunk_end = std::cmp::min(dimensions[0], chunk_start + chunks[0]);
+        // let chunk_length = (chunk_end - chunk_start) as usize * dimensions[1] as usize;
+        let chunk_data: Vec<f32> = vec![1.0; chunk_length];
+
+        // Write the chunk
+        array
+            .write_data(
+                chunk_data.as_slice(),
+                Some(&[chunk_dim_0, dimensions[1]]),
+                None,
+                None,
+            )
+            .unwrap();
+    }
+
+    // If we get here without a double free, the test passes
     Ok(())
 }
 

@@ -1,15 +1,16 @@
 use crate::backend::backends::OmFileReaderBackend;
 use crate::backend::mmapfile::{MmapFile, Mode};
+use crate::core::c_defaults::create_decoder;
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
 use omfileformatc_rs::{
     om_decoder_init, om_decoder_read_buffer_size, om_error_string, om_header_size, om_header_type,
-    om_trailer_read, om_trailer_size, om_variable_get_add_offset, om_variable_get_child,
-    om_variable_get_chunks, om_variable_get_compression, om_variable_get_dimensions,
-    om_variable_get_name, om_variable_get_number_of_children, om_variable_get_scalar,
-    om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmDecoder_t,
-    OmError_t_ERROR_OK, OmHeaderType_t_OM_HEADER_INVALID, OmHeaderType_t_OM_HEADER_LEGACY,
+    om_trailer_read, om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
+    om_variable_get_children_count, om_variable_get_chunks, om_variable_get_compression,
+    om_variable_get_dimensions, om_variable_get_name, om_variable_get_scalar,
+    om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmError_t_ERROR_OK,
+    OmHeaderType_t_OM_HEADER_INVALID, OmHeaderType_t_OM_HEADER_LEGACY,
     OmHeaderType_t_OM_HEADER_READ_TRAILER, OmVariable_t,
 };
 use std::fs::File;
@@ -46,14 +47,18 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                     let trailer_data = backend
                         .get_bytes((file_size - trailer_size) as u64, trailer_size as u64)
                         .expect("Failed to read trailer");
-                    let position = om_trailer_read(trailer_data.as_ptr() as *const c_void);
-
-                    if position.size == 0 {
+                    let mut offset = 0u64;
+                    let mut size = 0u64;
+                    if !om_trailer_read(
+                        trailer_data.as_ptr() as *const c_void,
+                        &mut offset,
+                        &mut size,
+                    ) {
                         return Err(OmFilesRsError::NotAnOmFile);
                     }
 
                     let data_variable = backend
-                        .get_bytes(position.offset, position.size)
+                        .get_bytes(offset, size)
                         .expect("Failed to read data variable");
                     om_variable_init(data_variable.as_ptr() as *const c_void)
                 },
@@ -118,26 +123,28 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     }
 
     pub fn number_of_children(&self) -> u32 {
-        unsafe { om_variable_get_number_of_children(self.variable) }
+        unsafe { om_variable_get_children_count(self.variable) }
     }
 
-    pub fn get_child(&self, index: i32) -> Option<Self> {
-        unsafe {
-            let child = om_variable_get_child(self.variable, index);
-            if child.size == 0 {
-                return None;
-            }
-            let data_child = self
-                .backend
-                .get_bytes(child.offset, child.size)
-                .expect("Failed to read child data");
-            let child_variable = om_variable_init(data_child.as_ptr() as *const c_void);
-            Some(Self {
-                backend: self.backend.clone(),
-                variable: child_variable,
-                lut_chunk_element_count: self.lut_chunk_element_count,
-            })
+    pub fn get_child(&self, index: u32) -> Option<Self> {
+        let mut offset = 0u64;
+        let mut size = 0u64;
+        if !unsafe { om_variable_get_children(self.variable, index, 1, &mut offset, &mut size) } {
+            return None;
         }
+
+        let data_child = self
+            .backend
+            .get_bytes(offset, size)
+            .expect("Failed to read child data");
+
+        let child_variable = unsafe { om_variable_init(data_child.as_ptr() as *const c_void) };
+
+        Some(Self {
+            backend: self.backend.clone(),
+            variable: child_variable,
+            lut_chunk_element_count: self.lut_chunk_element_count,
+        })
     }
 
     pub fn read_scalar<T: OmFileScalarDataType>(&self) -> Option<T> {
@@ -145,12 +152,12 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             return None;
         }
         let mut value = T::default();
-        unsafe {
-            if om_variable_get_scalar(self.variable, &mut value as *mut T as *mut c_void)
-                != OmError_t_ERROR_OK
-            {
-                return None;
-            }
+
+        let error =
+            unsafe { om_variable_get_scalar(self.variable, &mut value as *mut T as *mut c_void) };
+
+        if error != OmError_t_ERROR_OK {
+            return None;
         }
         Some(value)
     }
@@ -184,7 +191,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
 
         // Initialize decoder
-        let mut decoder = unsafe { std::mem::zeroed::<OmDecoder_t>() };
+        let mut decoder = create_decoder();
         let error = unsafe {
             om_decoder_init(
                 &mut decoder,
@@ -194,7 +201,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                 read_count.as_ptr(),
                 into_cube_offset.as_ptr(),
                 into_cube_dimension.as_ptr(),
-                self.lut_chunk_element_count as u64,
+                self.lut_chunk_element_count,
                 io_size_merge,
                 io_size_max,
             )

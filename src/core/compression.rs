@@ -47,6 +47,6 @@ pub fn p4nenc256_bound(n: usize, bytes_per_element: usize) -> usize {
 /// For decoding: compression lib read and write more data to buffers
 /// https://github.com/powturbo/TurboPFor-Integer-Compression/issues/59
 pub fn p4ndec256_bound(n: usize, bytes_per_element: usize) -> usize {
-    // Note: padding for output buffer should noe be required anymore
+    // Note: padding for output buffer should not be required anymore
     n * bytes_per_element + 32 * 4
 }
