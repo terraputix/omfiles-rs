@@ -60,7 +60,6 @@ pub trait OmFileReaderBackend {
                         &mut error,
                     ) {
                         let error_string = c_error_string(error);
-
                         panic!("OmDecoder: {:}", &error_string);
                     }
                 }
