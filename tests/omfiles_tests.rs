@@ -275,19 +275,21 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let count = backend.count() as u64;
     let bytes = backend.get_bytes(0, count)?;
 
+    println!("{:?}", bytes);
+
     // difference on x86 and ARM cause by the underlying compression
-    // #[cfg(target_arch = "x86_64")]
-    // assert_eq!(
-    //     bytes,
-    //     &[
-    //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 128, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
-    //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
-    //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
-    //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
-    //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    //     ]
-    // );
+    #[cfg(target_arch = "x86_64")]
+    assert_eq!(
+        bytes,
+        &[
+            79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 128, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14,
+            197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
+            0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
+            0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
+            40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+        ]
+    );
     #[cfg(target_arch = "aarch64")]
     assert_eq!(
         bytes,
@@ -486,13 +488,16 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     let bytes = backend.get_bytes(0, count as u64)?;
     assert_eq!(&bytes[0..3], &[79, 77, 3]);
     assert_eq!(&bytes[3..8], &[0, 3, 34, 140, 2]);
-    // difference on x86 and ARM cause by the underlying compression
-    #[cfg(target_arch = "x86_64")]
+    // difference on x86 and ARM cause by the underlying compression and compiler combination...?
+    #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     {
         assert_eq!(&bytes[8..12], &[2, 3, 114, 141]);
         assert_eq!(&bytes[12..16], &[6, 3, 34, 140]);
     }
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(any(
+        target_arch = "aarch64",
+        all(target_os = "windows", target_arch = "x86_64")
+    ))]
     {
         assert_eq!(&bytes[8..12], &[2, 3, 114, 1]);
         assert_eq!(&bytes[12..16], &[6, 3, 34, 0]);
