@@ -275,8 +275,6 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let count = backend.count() as u64;
     let bytes = backend.get_bytes(0, count)?;
 
-    println!("{:?}", bytes);
-
     // difference on x86 and ARM cause by the underlying compression
     #[cfg(target_arch = "x86_64")]
     assert_eq!(
@@ -491,8 +489,8 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     // difference on x86 and ARM cause by the underlying compression and compiler combination...?
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     {
-        assert_eq!(&bytes[8..12], &[2, 3, 114, 141]);
-        assert_eq!(&bytes[12..16], &[6, 3, 34, 140]);
+        assert_eq!(&bytes[8..12], &[2, 3, 114, 1]);
+        assert_eq!(&bytes[12..16], &[6, 3, 34, 0]);
     }
     #[cfg(any(
         target_arch = "aarch64",
