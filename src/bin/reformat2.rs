@@ -7,8 +7,8 @@ use std::io;
 fn main() -> io::Result<()> {
     let control_range_dim0 = 10000..10001;
     let control_range_dim1 = 0..100;
-    let input_file_path = "icond2_temp2m_chunk_3960.om";
-    let output_file_path = "icond2_test_reformatted.om";
+    let input_file_path = "icond2_test_reformatted.om";
+    let output_file_path = "icond2_test_reformatted_v2.om";
 
     // Read data from the input OM file
     let reader = OmFileReader2::from_file(input_file_path)
@@ -34,14 +34,16 @@ fn main() -> io::Result<()> {
     // Write the compressed data to the output OM file
     let mut file_writer = OmFileWriter2::new(
         &file_handle,
-        1024 * 1024 * 1024, // Initial capacity of 10MB
+        1024 * 1024 * 10, // Initial capacity of 10MB
     );
     println!("created writer");
 
     // let rechunked_dimensions = vec![50, 121];
     // let rechunked_dimensions = chunks.iter().map(|&x| x).collect::<Vec<_>>();
+    // let rechunked_dimensions = vec![chunks[0] * 200, chunks[1]];
     // let rechunked_dimensions = vec![chunks[0], chunks[1]];
     let rechunked_dimensions = vec![dimensions[0], dimensions[1]];
+    println!("rechunked_dimensions: {:?}", &rechunked_dimensions);
 
     let mut writer = file_writer
         .prepare_array::<f32>(

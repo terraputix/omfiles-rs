@@ -412,6 +412,169 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_delta2d_encode() {
+    let mut buffer: Vec<i16> = vec![1, 2, 3, 4, 5, 7, 9, 11, 13, 15];
+    unsafe { omfileformatc_rs::delta2d_encode(2, 5, buffer.as_mut_ptr()) };
+    assert_eq!(buffer, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+    let mut buffer: Vec<u8> = vec![2, 0, 5, 0, 11, 0, 14, 0];
+    unsafe { omfileformatc_rs::delta2d_encode(4, 1, buffer.as_mut_ptr() as *mut i16) }
+    assert_eq!(&buffer, &[2, 0, 3, 0, 6, 0, 3, 0])
+}
+
+// For x86_64
+#[cfg(target_arch = "x86_64")]
+pub fn zero_simd_registers() -> Result<(), &'static str> {
+    unsafe {
+        // Check CPU features
+        if is_x86_feature_detected!("avx") {
+            // Clear AVX registers
+            std::arch::asm!("vzeroall", "vzeroupper");
+        } else if is_x86_feature_detected!("sse") {
+            // Clear SSE registers
+            std::arch::asm!(
+                "pxor xmm0, xmm0",
+                "pxor xmm1, xmm1",
+                "pxor xmm2, xmm2",
+                "pxor xmm3, xmm3",
+                "pxor xmm4, xmm4",
+                "pxor xmm5, xmm5",
+                "pxor xmm6, xmm6",
+                "pxor xmm7, xmm7",
+            );
+        }
+
+        // Clear general purpose registers
+        std::arch::asm!(
+            "xor rax, rax",
+            "xor rbx, rbx",
+            "xor rcx, rcx",
+            "xor rdx, rdx",
+            "xor rsi, rsi",
+            "xor rdi, rdi",
+            "xor r8, r8",
+            "xor r9, r9",
+            "xor r10, r10",
+            "xor r11, r11",
+            "xor r12, r12",
+            // "xor r13, r13",
+            "xor r14, r14",
+            "xor r15, r15",
+        );
+
+        Ok(())
+    }
+}
+
+#[test]
+fn repeated_p4nzenc128v16_evaluation() -> Result<(), &'static str> {
+    let mut u8_nums = vec![0_u8, 0, 1, 0, 3, 0, 3, 0, 6, 0, 6, 0, 3, 0, 3, 0];
+
+    let mut compressed = vec![0_u8; 1000];
+
+    // if we enable or disable this block of code, we get different results on x86_64 ubuntu in docker. Why?
+    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+    {
+        let wrote_bytes = unsafe {
+            omfileformatc_rs::p4nzenc128v16(
+                u8_nums.as_mut_ptr() as *mut u16,
+                8,
+                compressed.as_mut_ptr(),
+            )
+        };
+
+        assert_eq!(wrote_bytes, 5);
+        assert_eq!(&compressed[0..5], &[0x00, 0x03, 0x22, 0x8c, 0x02]);
+    }
+
+    u8_nums[0..8].copy_from_slice(&[2_u8, 0, 3, 0, 6, 0, 3, 0]);
+
+    compressed.copy_from_slice(&[0_u8; 1000]);
+
+    zero_simd_registers()?;
+
+    let wrote_bytes = unsafe {
+        omfileformatc_rs::p4nzenc128v16(
+            u8_nums.as_mut_ptr() as *mut u16,
+            4,
+            compressed.as_mut_ptr(),
+        )
+    };
+
+    assert_eq!(wrote_bytes, 4);
+    assert_eq!(&compressed[0..4], &[2, 3, 114, 141]);
+    // this should be [2, 3, 114, 1]
+
+    compressed.copy_from_slice(&[0_u8; 1000]);
+
+    let wrote_bytes = unsafe {
+        omfileformatc_rs::p4nzenc128v16(
+            u8_nums.as_mut_ptr() as *mut u16,
+            4,
+            compressed.as_mut_ptr(),
+        )
+    };
+
+    assert_eq!(wrote_bytes, 4);
+    assert_eq!(&compressed[0..4], &[2, 3, 114, 141]);
+    Ok(())
+}
+
+#[test]
+fn test_p4nzenc128v16_cpuarch_dependency() {
+    // let mut u8_nums = vec![0_u8, 0, 1, 0, 3, 0, 3, 0];
+    let u8_nums = vec![2_u8, 0, 3, 0, 6, 0, 3, 0];
+    let u16_len = u8_nums.len() / 2;
+
+    let mut u16_nums = unsafe {
+        // Create a new Vec<u16> with the same underlying memory
+        Vec::from_raw_parts(
+            u8_nums.as_ptr() as *mut u16,
+            u16_len,                // len in u16s is half of u8s
+            u8_nums.capacity() / 2, // capacity in u16s is half of u8s
+        )
+    };
+    // Make sure the original vec doesn't drop the memory
+    std::mem::forget(u8_nums);
+
+    let compressed = vec![0_u8; 1000];
+    let mut direct_compressed = compressed.clone();
+    let mut callback_compressed = compressed.clone();
+
+    // Test both direct function and function pointer callbacks
+    let direct_result = unsafe {
+        omfileformatc_rs::p4nzenc128v16(u16_nums.as_mut_ptr(), 4, direct_compressed.as_mut_ptr())
+    };
+
+    let callback_result = unsafe {
+        // Cast through raw function pointers first
+        let fn_ptr = omfileformatc_rs::p4nzenc128v16 as *const ();
+        let callback: omfileformatc_rs::om_compress_callback_t = Some(std::mem::transmute(fn_ptr));
+
+        callback.unwrap()(
+            u16_nums.as_ptr() as *const std::os::raw::c_void,
+            4,
+            callback_compressed.as_mut_ptr() as *mut std::os::raw::c_void,
+        )
+    };
+
+    assert_eq!(direct_result, callback_result as usize);
+    assert_eq!(direct_result, 4);
+    assert_eq!(&direct_compressed[0..4], &callback_compressed[0..4]);
+    assert_eq!(&direct_compressed[0..4], &[2, 3, 114, 1]);
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        assert_eq!(&direct_compressed[0..4], &[2, 3, 114, 1]);
+        // somehow this is in CI of omfiles-rs: [2, 3, 114, 141] ???
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        assert_eq!(&direct_compressed[0..4], &[2, 3, 114, 1]);
+    }
+}
+
+#[test]
 fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     let file = "writetest.om";
     remove_file_if_exists(file);
