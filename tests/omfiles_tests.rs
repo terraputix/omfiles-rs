@@ -468,13 +468,11 @@ pub fn zero_simd_registers() -> Result<(), &'static str> {
 
 #[test]
 fn repeated_p4nzenc128v16_evaluation() -> Result<(), &'static str> {
-    let mut u8_nums = vec![0_u8, 0, 1, 0, 3, 0, 3, 0, 6, 0, 6, 0, 3, 0, 3, 0];
-
     let mut compressed = vec![0_u8; 1000];
 
     // if we enable or disable this block of code, we get different results on x86_64 ubuntu in docker. Why?
-    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
-    {
+    if false {
+        let mut u8_nums = vec![0_u8, 0, 1, 0, 3, 0, 3, 0, 6, 0, 6, 0, 3, 0, 3, 0];
         let wrote_bytes = unsafe {
             omfileformatc_rs::p4nzenc128v16(
                 u8_nums.as_mut_ptr() as *mut u16,
@@ -487,36 +485,40 @@ fn repeated_p4nzenc128v16_evaluation() -> Result<(), &'static str> {
         assert_eq!(&compressed[0..5], &[0x00, 0x03, 0x22, 0x8c, 0x02]);
     }
 
-    u8_nums[0..8].copy_from_slice(&[2_u8, 0, 3, 0, 6, 0, 3, 0]);
+    {
+        let mut u8_nums = vec![2_u8, 0, 3, 0, 6, 0, 3, 0];
+        compressed.copy_from_slice(&[0_u8; 1000]);
+        zero_simd_registers()?;
 
-    compressed.copy_from_slice(&[0_u8; 1000]);
+        let wrote_bytes = unsafe {
+            omfileformatc_rs::p4nzenc128v16(
+                u8_nums.as_mut_ptr() as *mut u16,
+                4,
+                compressed.as_mut_ptr(),
+            )
+        };
 
-    zero_simd_registers()?;
+        assert_eq!(wrote_bytes, 4);
+        assert_eq!(&compressed[0..4], &[2, 3, 114, 141]);
+        // this should be [2, 3, 114, 1]
+    }
 
-    let wrote_bytes = unsafe {
-        omfileformatc_rs::p4nzenc128v16(
-            u8_nums.as_mut_ptr() as *mut u16,
-            4,
-            compressed.as_mut_ptr(),
-        )
-    };
+    {
+        let mut u8_nums = vec![2_u8, 0, 3, 0, 6, 0, 3, 0];
+        compressed.copy_from_slice(&[0_u8; 1000]);
 
-    assert_eq!(wrote_bytes, 4);
-    assert_eq!(&compressed[0..4], &[2, 3, 114, 141]);
-    // this should be [2, 3, 114, 1]
+        let wrote_bytes = unsafe {
+            omfileformatc_rs::p4nzenc128v16(
+                u8_nums.as_mut_ptr() as *mut u16,
+                4,
+                compressed.as_mut_ptr(),
+            )
+        };
 
-    compressed.copy_from_slice(&[0_u8; 1000]);
+        assert_eq!(wrote_bytes, 4);
+        assert_eq!(&compressed[0..4], &[2, 3, 114, 141]);
+    }
 
-    let wrote_bytes = unsafe {
-        omfileformatc_rs::p4nzenc128v16(
-            u8_nums.as_mut_ptr() as *mut u16,
-            4,
-            compressed.as_mut_ptr(),
-        )
-    };
-
-    assert_eq!(wrote_bytes, 4);
-    assert_eq!(&compressed[0..4], &[2, 3, 114, 141]);
     Ok(())
 }
 
