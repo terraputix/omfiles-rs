@@ -441,6 +441,7 @@ pub fn zero_simd_registers() -> Result<(), &'static str> {
                 "pxor xmm5, xmm5",
                 "pxor xmm6, xmm6",
                 "pxor xmm7, xmm7",
+                options(nomem, nostack)
             );
         }
 
@@ -464,6 +465,51 @@ pub fn zero_simd_registers() -> Result<(), &'static str> {
 
         Ok(())
     }
+}
+
+#[test]
+fn test_pontially_flaky_roundtrip() -> Result<(), &'static str> {
+    // if we enable or disable this block of code, we get different results on x86_64 ubuntu docker for the decoding
+    // if we wrap it in a function, these differences disappear
+    if true {
+        let mut compressed = vec![0_u8; 1000];
+        let mut u8_nums = vec![0_u8, 0, 1, 0, 3, 0, 3, 0, 6, 0, 6, 0, 3, 0, 3, 0];
+        let wrote_bytes = unsafe {
+            omfileformatc_rs::p4nzenc128v16(
+                u8_nums.as_mut_ptr() as *mut u16,
+                8,
+                compressed.as_mut_ptr(),
+            )
+        };
+
+        assert_eq!(wrote_bytes, 5);
+        assert_eq!(&compressed[0..5], &[0x00, 0x03, 0x22, 0x8c, 0x02]);
+    }
+
+    let mut input = vec![2_u8, 0, 3, 0, 6, 0, 3, 0];
+
+    let mut encoded = vec![0u8; input.len() * 4 + 1024]; // Buffer for encoded data
+    let mut decoded = vec![0u16; input.len() / 2]; // Buffer for decoded data
+
+    // Encoding
+    let encoded_size = unsafe {
+        omfileformatc_rs::p4nzenc128v16(input.as_mut_ptr() as *mut u16, 4, encoded.as_mut_ptr())
+    };
+    assert_eq!(&encoded[0..4], &[2, 3, 114, 1]);
+    // this is [2, 3, 114, 114] on x86_64 ubuntu docker
+
+    // Decoding
+    let decoded_size = unsafe {
+        omfileformatc_rs::p4nzdec128v16(encoded.as_mut_ptr(), encoded_size, decoded.as_mut_ptr())
+    };
+
+    // Check results
+    assert_eq!(decoded_size, input.len() / 2);
+    let decoded_bytes =
+        unsafe { std::slice::from_raw_parts(decoded.as_ptr() as *const u8, decoded.len() * 2) };
+    assert_eq!(decoded_bytes, input);
+
+    Ok(())
 }
 
 #[test]
