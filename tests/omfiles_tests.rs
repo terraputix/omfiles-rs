@@ -16,6 +16,7 @@ use std::{
     f32::{self},
     fs::{self, File},
     rc::Rc,
+    sync::Arc,
 };
 
 #[test]
@@ -202,7 +203,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-    let read = OmFileReader2::new(Rc::new(read_backend), 256)?;
+    let read = OmFileReader2::new(Arc::new(read_backend), 256)?;
 
     let a1 = read.read_simple(&[50..51, 20..21, 1..2], None, None)?;
     assert_eq!(a1, vec![201.0]);
@@ -261,7 +262,7 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-    let backend = Rc::new(read_backend);
+    let backend = Arc::new(read_backend);
 
     let read = OmFileReader2::new(backend.clone(), 256)?;
 
@@ -278,14 +279,14 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     // // difference on x86 and ARM cause by the underlying compression
     // assert_eq!(
     //     bytes,
-    //     &[
-    //         79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
-    //         17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
-    //         6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
-    //         0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
-    //         0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
-    //         0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    //     ]
+    // &[
+    //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
+    //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
+    //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
+    //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
+    //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
+    //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+    // ]
     // );
     // assert_eq!(
     //     bytes,
@@ -393,7 +394,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
     // Read the file
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-    let read = OmFileReader2::new(Rc::new(read_backend), 256)?;
+    let read = OmFileReader2::new(Arc::new(read_backend), 256)?;
 
     // Read the data
     let a = read.read_simple(&[0..5, 0..5], None, None)?;
@@ -451,7 +452,7 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     // Read the file
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-    let backend = Rc::new(read_backend);
+    let backend = Arc::new(read_backend);
     let read = OmFileReader2::new(backend.clone(), lut_chunk_element_count)?;
 
     assert_eq!(read.number_of_children(), 2);
@@ -556,7 +557,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     // Open file for reading
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-    let backend = Rc::new(read_backend);
+    let backend = Arc::new(read_backend);
     let read = OmFileReader2::new(backend.clone(), lut_chunk_element_count)?;
 
     // Rest of test remains the same but using read.read_simple() instead of read_var.read()
@@ -747,7 +748,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
     // Initialize the reader using the open_file method
-    let read = OmFileReader2::new(Rc::new(read_backend), lut_chunk_element_count)?;
+    let read = OmFileReader2::new(Arc::new(read_backend), lut_chunk_element_count)?;
 
     // Read with io_size_max: 0, io_size_merge: 0
     let a = read.read_simple(&[0..5, 0..5], Some(0), Some(0))?;
@@ -903,7 +904,7 @@ fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
     // Initialize the reader using the open_file method
-    let read = OmFileReader2::new(Rc::new(read_backend), 2)?;
+    let read = OmFileReader2::new(Arc::new(read_backend), 2)?;
     let dims = read.get_dimensions();
 
     // Read the entire data back and assert equality

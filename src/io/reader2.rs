@@ -16,11 +16,11 @@ use omfileformatc_rs::{
 use std::fs::File;
 use std::ops::Range;
 use std::os::raw::c_void;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {
     /// Points to the underlying memory. Needs to remain in scope to keep memory accessible
-    pub backend: Rc<Backend>,
+    pub backend: Arc<Backend>,
     pub variable: *const OmVariable_t,
     /// Number of elements in index LUT chunk. Assumed to be 256 in production files. Only used for testing!
     pub lut_chunk_element_count: u64,
@@ -28,7 +28,10 @@ pub struct OmFileReader2<Backend: OmFileReaderBackend> {
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     #[allow(non_upper_case_globals)]
-    pub fn new(backend: Rc<Backend>, lut_chunk_element_count: u64) -> Result<Self, OmFilesRsError> {
+    pub fn new(
+        backend: Arc<Backend>,
+        lut_chunk_element_count: u64,
+    ) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() } as u64;
         let header_data = backend
             .get_bytes(0, header_size)
@@ -261,7 +264,7 @@ impl OmFileReader2<MmapFile> {
     pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
         // TODO: Error handling
         let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
-        Self::new(Rc::new(mmap), 256) // FIXME
+        Self::new(Arc::new(mmap), 256) // FIXME
     }
 
     /// Check if the file was deleted on the file system.
