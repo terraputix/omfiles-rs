@@ -99,6 +99,25 @@ impl OmFileWriterBackend for &File {
     }
 }
 
+impl OmFileWriterBackend for File {
+    fn write(&mut self, data: &[u8]) -> Result<(), OmFilesRsError> {
+        self.write_all(data).map_err(|e| map_io_error(e))?;
+        Ok(())
+    }
+
+    fn write_at(&mut self, data: &[u8], offset: usize) -> Result<(), OmFilesRsError> {
+        self.seek(SeekFrom::Start(offset as u64))
+            .map_err(|e| map_io_error(e))?;
+        self.write_all(data).map_err(|e| map_io_error(e))?;
+        Ok(())
+    }
+
+    fn synchronize(&self) -> Result<(), OmFilesRsError> {
+        self.sync_all().map_err(|e| map_io_error(e))?;
+        Ok(())
+    }
+}
+
 impl OmFileReaderBackend for MmapFile {
     fn count(&self) -> usize {
         self.data.len()
