@@ -33,9 +33,13 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         lut_chunk_element_count: u64,
     ) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() } as u64;
-        let header_data = backend
-            .get_bytes(0, header_size)
-            .expect("Failed to read header");
+        let owned_data = backend.get_bytes_owned(0, header_size);
+        let header_data = match owned_data {
+            Ok(ref data) => data.as_slice(),
+            Err(error) => {
+                backend.forward_unimplemented_error(error, || backend.get_bytes(0, header_size))?
+            }
+        };
 
         let header_type = unsafe { om_header_type(header_data.as_ptr() as *const c_void) };
 
@@ -47,9 +51,14 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                 OmHeaderType_t_OM_HEADER_READ_TRAILER => unsafe {
                     let file_size = backend.count();
                     let trailer_size = om_trailer_size();
-                    let trailer_data = backend
-                        .get_bytes((file_size - trailer_size) as u64, trailer_size as u64)
-                        .expect("Failed to read trailer");
+                    let trailer_offset = (file_size - trailer_size) as u64;
+                    let owned_data = backend.get_bytes_owned(trailer_offset, trailer_size as u64);
+                    let trailer_data = match owned_data {
+                        Ok(ref data) => data.as_slice(),
+                        Err(error) => backend.forward_unimplemented_error(error, || {
+                            backend.get_bytes(trailer_offset, trailer_size as u64)
+                        })?,
+                    };
                     let mut offset = 0u64;
                     let mut size = 0u64;
                     if !om_trailer_read(
@@ -60,9 +69,13 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                         return Err(OmFilesRsError::NotAnOmFile);
                     }
 
-                    let data_variable = backend
-                        .get_bytes(offset, size)
-                        .expect("Failed to read data variable");
+                    let owned_data = backend.get_bytes_owned(offset, size);
+                    let data_variable = match owned_data {
+                        Ok(ref data) => data.as_slice(),
+                        Err(error) => backend.forward_unimplemented_error(error, || {
+                            backend.get_bytes(offset, size)
+                        })?,
+                    };
                     om_variable_init(data_variable.as_ptr() as *const c_void)
                 },
                 OmHeaderType_t_OM_HEADER_INVALID => {
@@ -136,10 +149,14 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             return None;
         }
 
-        let data_child = self
-            .backend
-            .get_bytes(offset, size)
-            .expect("Failed to read child data");
+        let owned_data = self.backend.get_bytes_owned(offset, size);
+        let data_child = match owned_data {
+            Ok(ref data) => data.as_slice(),
+            Err(error) => self
+                .backend
+                .forward_unimplemented_error(error, || self.backend.get_bytes(offset, size))
+                .expect("Failed to read child data."),
+        };
 
         let child_variable = unsafe { om_variable_init(data_child.as_ptr() as *const c_void) };
 

@@ -63,11 +63,19 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         // verify that the read ranges are within the dimensions
         self.dimensions.check_read_ranges(&dim0_read, &dim1_read)?;
 
+        let chunk_offset = OmHeader::LENGTH as u64;
+        let chunk_count = self.dimensions.chunk_offset_length() + chunk_offset;
         // Fetch chunk table
-        let chunk_table_buffer = self.reader.backend.get_bytes(
-            OmHeader::LENGTH as u64,
-            self.dimensions.chunk_offset_length() + OmHeader::LENGTH as u64,
-        )?;
+        let owned_data = self
+            .reader
+            .backend
+            .get_bytes_owned(chunk_offset, chunk_count);
+        let chunk_table_buffer = match owned_data {
+            Ok(ref data) => data.as_slice(),
+            Err(error) => self.reader.backend.forward_unimplemented_error(error, || {
+                self.reader.backend.get_bytes(chunk_offset, chunk_count)
+            })?,
+        };
         let chunk_offsets = as_typed_slice::<usize>(chunk_table_buffer);
 
         // let n_dim0_chunks = self.dimensions.n_dim0_chunks();

@@ -42,6 +42,20 @@ pub trait OmFileReaderBackend {
         ))
     }
 
+    fn forward_unimplemented_error<'a, F>(
+        &'a self,
+        e: OmFilesRsError,
+        fallback_fn: F,
+    ) -> Result<&'a [u8], OmFilesRsError>
+    where
+        F: FnOnce() -> Result<&'a [u8], OmFilesRsError>,
+    {
+        match e {
+            OmFilesRsError::NotImplementedError(_) => fallback_fn(),
+            _ => Err(e),
+        }
+    }
+
     fn decode<OmType: OmFileArrayDataType>(
         &self,
         decoder: &OmDecoder_t,
@@ -56,12 +70,9 @@ pub trait OmFileReaderBackend {
                 let owned_data = self.get_bytes_owned(index_read.offset, index_read.count);
                 let index_data = match owned_data {
                     Ok(ref data) => data.as_slice(),
-                    Err(error) => match error {
-                        OmFilesRsError::NotImplementedError(_) => {
-                            self.get_bytes(index_read.offset, index_read.count)?
-                        }
-                        _ => return Err(error),
-                    },
+                    Err(error) => self.forward_unimplemented_error(error, || {
+                        self.get_bytes(index_read.offset, index_read.count)
+                    })?,
                 };
 
                 let mut data_read = new_data_read(&index_read);
@@ -80,12 +91,9 @@ pub trait OmFileReaderBackend {
                     let owned_data = self.get_bytes_owned(data_read.offset, data_read.count);
                     let data_data = match owned_data {
                         Ok(ref data) => data.as_slice(),
-                        Err(error) => match error {
-                            OmFilesRsError::NotImplementedError(_) => {
-                                self.get_bytes(data_read.offset, data_read.count)?
-                            }
-                            _ => return Err(error),
-                        },
+                        Err(error) => self.forward_unimplemented_error(error, || {
+                            self.get_bytes(data_read.offset, data_read.count)
+                        })?,
                     };
 
                     if !om_decoder_decode_chunks(
