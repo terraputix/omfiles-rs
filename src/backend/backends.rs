@@ -16,13 +16,31 @@ pub trait OmFileWriterBackend {
     fn synchronize(&self) -> Result<(), OmFilesRsError>;
 }
 
+/// A trait for reading byte data from different storage backends.
+/// Provides methods for reading bytes either by reference or as owned data,
+/// as well as functions for prefetching and pre-reading data.
 pub trait OmFileReaderBackend {
     /// Length in bytes
     fn count(&self) -> usize;
     fn needs_prefetch(&self) -> bool;
     fn prefetch_data(&self, offset: usize, count: usize);
     fn pre_read(&self, offset: usize, count: usize) -> Result<(), OmFilesRsError>;
-    fn get_bytes(&self, offset: u64, count: u64) -> Result<&[u8], OmFilesRsError>;
+
+    /// Returns a reference to a slice of bytes from the backend, starting at `offset` and reading `count` bytes.
+    /// At least one of `get_bytes` or `get_bytes_owned` must be implemented.
+    fn get_bytes(&self, _offset: u64, _count: u64) -> Result<&[u8], OmFilesRsError> {
+        Err(OmFilesRsError::NotImplementedError(
+            "You need to implement either get_bytes or get_bytes_owned!".to_string(),
+        ))
+    }
+
+    /// Returns an owned Vec<u8> containing bytes from the backend, starting at `offset` and reading `count` bytes.
+    /// At least one of `get_bytes` or `get_bytes_owned` must be implemented.
+    fn get_bytes_owned(&self, _offset: u64, _count: u64) -> Result<Vec<u8>, OmFilesRsError> {
+        Err(OmFilesRsError::NotImplementedError(
+            "You need to implement either get_bytes or get_bytes_owned!".to_string(),
+        ))
+    }
 
     fn decode<OmType: OmFileArrayDataType>(
         &self,
@@ -34,7 +52,12 @@ pub trait OmFileReaderBackend {
         unsafe {
             // Loop over index blocks and read index data
             while om_decoder_next_index_read(decoder, &mut index_read) {
-                let index_data = self.get_bytes(index_read.offset, index_read.count)?;
+                // Get bytes for index-read as owned data or as reference
+                let owned_data = self.get_bytes_owned(index_read.offset, index_read.count);
+                let index_data = match owned_data {
+                    Ok(ref data) => data.as_slice(),
+                    Err(_) => self.get_bytes(index_read.offset, index_read.count)?,
+                };
 
                 let mut data_read = new_data_read(&index_read);
 
@@ -48,7 +71,12 @@ pub trait OmFileReaderBackend {
                     index_read.count,
                     &mut error,
                 ) {
-                    let data_data = self.get_bytes(data_read.offset, data_read.count)?;
+                    // Get bytes for data-read as owned data or as reference
+                    let owned_data = self.get_bytes_owned(data_read.offset, data_read.count);
+                    let data_data = match owned_data {
+                        Ok(ref data) => data.as_slice(),
+                        Err(_) => self.get_bytes(data_read.offset, data_read.count)?,
+                    };
 
                     if !om_decoder_decode_chunks(
                         decoder,
