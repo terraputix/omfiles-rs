@@ -56,7 +56,12 @@ pub trait OmFileReaderBackend {
                 let owned_data = self.get_bytes_owned(index_read.offset, index_read.count);
                 let index_data = match owned_data {
                     Ok(ref data) => data.as_slice(),
-                    Err(_) => self.get_bytes(index_read.offset, index_read.count)?,
+                    Err(error) => match error {
+                        OmFilesRsError::NotImplementedError(_) => {
+                            self.get_bytes(index_read.offset, index_read.count)?
+                        }
+                        _ => return Err(error),
+                    },
                 };
 
                 let mut data_read = new_data_read(&index_read);
@@ -75,7 +80,12 @@ pub trait OmFileReaderBackend {
                     let owned_data = self.get_bytes_owned(data_read.offset, data_read.count);
                     let data_data = match owned_data {
                         Ok(ref data) => data.as_slice(),
-                        Err(_) => self.get_bytes(data_read.offset, data_read.count)?,
+                        Err(error) => match error {
+                            OmFilesRsError::NotImplementedError(_) => {
+                                self.get_bytes(data_read.offset, data_read.count)?
+                            }
+                            _ => return Err(error),
+                        },
                     };
 
                     if !om_decoder_decode_chunks(
