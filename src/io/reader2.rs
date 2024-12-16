@@ -19,8 +19,13 @@ use std::os::raw::c_void;
 use std::sync::Arc;
 
 pub struct OmFileReader2<Backend: OmFileReaderBackend> {
-    /// Points to the underlying memory. Needs to remain in scope to keep memory accessible
+    /// The backend that provides data via the get_bytes method
     pub backend: Arc<Backend>,
+    /// Holds the data of the header, is not supposed to go out of scope
+    pub header_data: Vec<u8>,
+    /// Holds the data of the trailer (if available), is not supposed to go out of scope
+    pub trailer_data: Option<Vec<u8>>,
+    /// Opaque pointer to the variable defined by header/trailer
     pub variable: *const OmVariable_t,
     /// Number of elements in index LUT chunk. Assumed to be 256 in production files. Only used for testing!
     pub lut_chunk_element_count: u64,
@@ -35,13 +40,16 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         let header_size = unsafe { om_header_size() } as u64;
         let owned_data = backend.get_bytes_owned(0, header_size);
         let header_data = match owned_data {
-            Ok(ref data) => data.as_slice(),
-            Err(error) => {
-                backend.forward_unimplemented_error(error, || backend.get_bytes(0, header_size))?
-            }
+            Ok(data) => data,
+            Err(error) => backend
+                .forward_unimplemented_error(error, || backend.get_bytes(0, header_size))?
+                .to_vec(),
         };
 
         let header_type = unsafe { om_header_type(header_data.as_ptr() as *const c_void) };
+
+        // If we read a trailer, it needs to stay in scope!
+        let mut trailer_data: Option<Vec<u8>> = None;
 
         let variable = {
             match header_type {
@@ -53,21 +61,26 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                     let trailer_size = om_trailer_size();
                     let trailer_offset = (file_size - trailer_size) as u64;
                     let owned_data = backend.get_bytes_owned(trailer_offset, trailer_size as u64);
-                    let trailer_data = match owned_data {
-                        Ok(ref data) => data.as_slice(),
-                        Err(error) => backend.forward_unimplemented_error(error, || {
-                            backend.get_bytes(trailer_offset, trailer_size as u64)
-                        })?,
+                    let this_trailer = match owned_data {
+                        Ok(data) => data,
+                        Err(error) => backend
+                            .forward_unimplemented_error(error, || {
+                                backend.get_bytes(trailer_offset, trailer_size as u64)
+                            })?
+                            .to_vec(),
                     };
                     let mut offset = 0u64;
                     let mut size = 0u64;
                     if !om_trailer_read(
-                        trailer_data.as_ptr() as *const c_void,
+                        this_trailer.as_ptr() as *const c_void,
                         &mut offset,
                         &mut size,
                     ) {
                         return Err(OmFilesRsError::NotAnOmFile);
                     }
+
+                    // move this_trailer into trailer_data!
+                    trailer_data = Some(this_trailer);
 
                     let owned_data = backend.get_bytes_owned(offset, size);
                     let data_variable = match owned_data {
@@ -86,6 +99,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         };
         Ok(Self {
             backend,
+            header_data,
+            trailer_data,
             variable,
             lut_chunk_element_count,
         })
@@ -150,18 +165,21 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
         }
 
         let owned_data = self.backend.get_bytes_owned(offset, size);
-        let data_child = match owned_data {
-            Ok(ref data) => data.as_slice(),
+        let child_trailer = match owned_data {
+            Ok(data) => data,
             Err(error) => self
                 .backend
                 .forward_unimplemented_error(error, || self.backend.get_bytes(offset, size))
-                .expect("Failed to read child data."),
+                .expect("Failed to read child data.")
+                .to_vec(),
         };
 
-        let child_variable = unsafe { om_variable_init(data_child.as_ptr() as *const c_void) };
+        let child_variable = unsafe { om_variable_init(child_trailer.as_ptr() as *const c_void) };
 
         Some(Self {
             backend: self.backend.clone(),
+            header_data: self.header_data.clone(),
+            trailer_data: Some(child_trailer),
             variable: child_variable,
             lut_chunk_element_count: self.lut_chunk_element_count,
         })
