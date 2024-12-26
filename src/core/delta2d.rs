@@ -47,7 +47,7 @@ pub fn delta2d_encode_xor(length0: usize, length1: usize, chunk_buffer: &mut [f3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use omfileformatc_rs::{delta2d_decode, delta2d_decode_xor};
+    use omfileformatc_rs::{delta2d_decode16, delta2d_decode_xor};
 
     #[test]
     fn test_delta2d_encode() {
@@ -90,7 +90,7 @@ mod tests {
     fn test_delta2d_roundtrip() {
         let mut buffer: Vec<i16> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         unsafe {
-            delta2d_decode(2, 5, buffer.as_mut_ptr());
+            delta2d_decode16(2, 5, buffer.as_mut_ptr());
         }
         delta2d_encode(2, 5, &mut buffer);
         let expected: Vec<i16> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];

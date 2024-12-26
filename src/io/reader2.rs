@@ -28,16 +28,11 @@ pub struct OmFileReader2<Backend: OmFileReaderBackend> {
     pub variable_data: Vec<u8>,
     /// Opaque pointer to the variable defined by header/trailer
     pub variable: *const OmVariable_t,
-    /// Number of elements in index LUT chunk. Assumed to be 256 in production files. Only used for testing!
-    pub lut_chunk_element_count: u64,
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     #[allow(non_upper_case_globals)]
-    pub fn new(
-        backend: Arc<Backend>,
-        lut_chunk_element_count: u64,
-    ) -> Result<Self, OmFilesRsError> {
+    pub fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() } as u64;
         let owned_data = backend.get_bytes_owned(0, header_size);
         let header_data = match owned_data {
@@ -94,7 +89,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             backend,
             variable_data,
             variable: variable_ptr,
-            lut_chunk_element_count,
         })
     }
 
@@ -173,7 +167,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
             backend: self.backend.clone(),
             variable_data: child_variable,
             variable: child_variable_ptr,
-            lut_chunk_element_count: self.lut_chunk_element_count,
         })
     }
 
@@ -231,7 +224,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
                 read_count.as_ptr(),
                 into_cube_offset.as_ptr(),
                 into_cube_dimension.as_ptr(),
-                self.lut_chunk_element_count,
                 io_size_merge,
                 io_size_max,
             )
@@ -291,7 +283,7 @@ impl OmFileReader2<MmapFile> {
     pub fn from_file_handle(file_handle: File) -> Result<Self, OmFilesRsError> {
         // TODO: Error handling
         let mmap = MmapFile::new(file_handle, Mode::ReadOnly).unwrap();
-        Self::new(Arc::new(mmap), 256) // FIXME
+        Self::new(Arc::new(mmap)) // FIXME
     }
 
     /// Check if the file was deleted on the file system.

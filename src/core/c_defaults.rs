@@ -9,7 +9,6 @@ pub fn create_decoder() -> OmDecoder_t {
         io_size_merge: 0,
         io_size_max: 0,
         lut_chunk_length: 0,
-        lut_chunk_element_count: 0,
         lut_start: 0,
         number_of_chunks: 0,
         dimensions: std::ptr::null_mut(),
@@ -31,7 +30,6 @@ pub fn create_decoder() -> OmDecoder_t {
 pub fn create_encoder() -> OmEncoder_t {
     OmEncoder_t {
         dimension_count: 0,
-        lut_chunk_element_count: 0,
         dimensions: std::ptr::null_mut(),
         chunks: std::ptr::null_mut(),
         compress_callback: None,

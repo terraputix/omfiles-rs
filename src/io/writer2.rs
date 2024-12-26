@@ -99,7 +99,6 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
         compression: CompressionType,
         scale_factor: f32,
         add_offset: f32,
-        lut_chunk_element_count: u64,
     ) -> Result<OmFileWriterArray<T, FileHandle>, OmFilesRsError> {
         let _ = &self.write_header_if_required()?;
 
@@ -111,7 +110,6 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
             scale_factor,
             add_offset,
             self.buffer.borrow_mut(),
-            lut_chunk_element_count,
         ))
     }
 
@@ -211,7 +209,6 @@ impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
         scale_factor: f32,
         add_offset: f32,
         buffer: &'a mut OmBufferedWriter<FileHandle>,
-        lut_chunk_element_count: u64,
     ) -> Self {
         // Verify OmType matches data_type
         assert_eq!(OmType::DATA_TYPE_ARRAY, data_type, "Data type mismatch");
@@ -230,7 +227,6 @@ impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
                 dimensions.as_ptr(),
                 chunks.as_ptr(),
                 dimensions.len() as u64,
-                lut_chunk_element_count,
             )
         };
         assert_eq!(error, OmError_t_ERROR_OK, "OmEncoder_init failed");
@@ -324,11 +320,7 @@ impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
     /// Compress the lookup table and write it to the output buffer.
     pub fn write_lut(&mut self) -> u64 {
         let buffer_size = unsafe {
-            om_encoder_lut_buffer_size(
-                &self.encoder,
-                self.look_up_table.as_ptr(),
-                self.look_up_table.len() as u64,
-            )
+            om_encoder_lut_buffer_size(self.look_up_table.as_ptr(), self.look_up_table.len() as u64)
         };
 
         self.buffer
@@ -337,7 +329,6 @@ impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
 
         let compressed_lut_size = unsafe {
             om_encoder_compress_lut(
-                &mut self.encoder,
                 self.look_up_table.as_ptr(),
                 self.look_up_table.len() as u64,
                 self.buffer.buffer_at_write_position().as_mut_ptr(),

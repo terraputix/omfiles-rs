@@ -26,7 +26,7 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     pub fn new(backend: Backend) -> Result<Self, OmFilesRsError> {
-        let reader = OmFileReader2::new(Arc::new(backend), 256)?;
+        let reader = OmFileReader2::new(Arc::new(backend))?;
 
         let dimensions = reader.get_dimensions();
         let chunks = reader.get_chunk_dimensions();
@@ -167,7 +167,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                 ptr.add(2),
                 ptr.add(4),
                 ptr.add(6),
-                self.reader.lut_chunk_element_count,
                 LEGACY_IO_SIZE_MERGE,
                 LEGACY_IO_SIZE_MAX,
             )

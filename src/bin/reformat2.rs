@@ -50,7 +50,6 @@ fn main() -> io::Result<()> {
             CompressionType::P4nzdec256,
             reader.scale_factor(),
             reader.add_offset(),
-            256, // lut_chunk_element_count
         )
         .expect("Failed to prepare array");
 
