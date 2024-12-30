@@ -1,4 +1,4 @@
-use crate::om::errors::OmFilesRsError;
+use crate::errors::OmFilesRsError;
 use crate::utils::divide_rounded_up;
 use std::ops::Range;
 
@@ -38,8 +38,8 @@ impl Dimensions {
     }
 
     // length of the chunk offset table in bytes
-    pub fn chunk_offset_length(&self) -> usize {
-        self.n_chunks() * std::mem::size_of::<usize>()
+    pub fn chunk_offset_length(&self) -> u64 {
+        (self.n_chunks() * std::mem::size_of::<u64>()) as u64
     }
 
     #[inline(always)]

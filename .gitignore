@@ -3,4 +3,5 @@ writetest.om
 writetest_fpx.om
 benchmark.om
 *.om
+*.om~
 lcov.info

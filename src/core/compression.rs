@@ -1,6 +1,10 @@
-use crate::om::errors::OmFilesRsError;
+use omfileformatc_rs::OmCompression_t;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+use crate::errors::OmFilesRsError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum CompressionType {
     P4nzdec256 = 0,
     Fpxdec32 = 1,
@@ -13,6 +17,10 @@ impl CompressionType {
             CompressionType::P4nzdec256 | CompressionType::P4nzdec256logarithmic => 2,
             CompressionType::Fpxdec32 => 4,
         }
+    }
+
+    pub fn to_c(&self) -> OmCompression_t {
+        *self as OmCompression_t
     }
 }
 
@@ -31,6 +39,7 @@ impl TryFrom<u8> for CompressionType {
 
 /// For encoding: compression lib read and write more data to buffers
 /// https://github.com/powturbo/TurboPFor-Integer-Compression/issues/59
+/// /// Only the output buffer for encoding needs padding
 pub fn p4nenc256_bound(n: usize, bytes_per_element: usize) -> usize {
     ((n + 255) / 256 + (n + 32)) * bytes_per_element
 }
@@ -38,5 +47,6 @@ pub fn p4nenc256_bound(n: usize, bytes_per_element: usize) -> usize {
 /// For decoding: compression lib read and write more data to buffers
 /// https://github.com/powturbo/TurboPFor-Integer-Compression/issues/59
 pub fn p4ndec256_bound(n: usize, bytes_per_element: usize) -> usize {
+    // Note: padding for output buffer should not be required anymore
     n * bytes_per_element + 32 * 4
 }

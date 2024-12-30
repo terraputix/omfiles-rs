@@ -1,10 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use omfiles_rs::compression::CompressionType;
-use omfiles_rs::om::reader::OmFileReader;
-use omfiles_rs::om::writer::OmFileWriter;
+use omfiles_rs::core::compression::CompressionType;
+use omfiles_rs::io::reader::OmFileReader;
+use omfiles_rs::io::writer::OmFileWriter;
 use rand::Rng;
 use std::fs;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const DIM0_SIZE: usize = 1024 * 1000;
@@ -12,12 +12,12 @@ const DIM1_SIZE: usize = 1024;
 const CHUNK0_SIZE: usize = 20;
 const CHUNK1_SIZE: usize = 20;
 
-fn write_om_file(file: &str, data: &Arc<Vec<f32>>) {
+fn write_om_file(file: &str, data: Rc<Vec<f32>>) {
     OmFileWriter::new(DIM0_SIZE, DIM1_SIZE, CHUNK0_SIZE, CHUNK1_SIZE)
         .write_to_file(file, CompressionType::P4nzdec256, 1.0, true, |dim0pos| {
             let start = dim0pos * DIM1_SIZE;
             let end = start + CHUNK0_SIZE * DIM1_SIZE;
-            Ok(&data[start..end])
+            Ok(Rc::new(data[start..end].to_owned()))
         })
         .unwrap();
 }
@@ -26,7 +26,7 @@ pub fn benchmark_in_memory(c: &mut Criterion) {
     let mut group = c.benchmark_group("In-memory operations");
     group.sample_size(10);
 
-    let data = Arc::new(
+    let data = Rc::new(
         (0..DIM0_SIZE * DIM1_SIZE)
             .map(|x| x as f32)
             .collect::<Vec<f32>>(),
@@ -39,7 +39,7 @@ pub fn benchmark_in_memory(c: &mut Criterion) {
             for _i in 0..iters {
                 black_box(
                     OmFileWriter::new(DIM0_SIZE, DIM1_SIZE, CHUNK0_SIZE, CHUNK1_SIZE)
-                        .write_all_in_memory(CompressionType::Fpxdec32, 0.1, &data)
+                        .write_all_in_memory(CompressionType::Fpxdec32, 0.1, data.clone())
                         .unwrap(),
                 );
             }
@@ -56,7 +56,7 @@ pub fn benchmark_write(c: &mut Criterion) {
     group.sample_size(10);
 
     let file = "benchmark.om";
-    let data = Arc::new(
+    let data = Rc::new(
         (0..DIM0_SIZE * DIM1_SIZE)
             .map(|x| x as f32)
             .collect::<Vec<f32>>(),
@@ -70,7 +70,7 @@ pub fn benchmark_write(c: &mut Criterion) {
                 remove_file_if_exists(file);
 
                 timer.start();
-                black_box(write_om_file(&file, &data));
+                black_box(write_om_file(&file, data.clone()));
                 timer.stop();
             }
             timer.elapsed()
