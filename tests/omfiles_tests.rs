@@ -132,12 +132,8 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
 }
 #[test]
 fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest_failing.om";
-    remove_file_if_exists(file);
-
-    // Create the file and writer
-    let file_handle = File::create(file)?;
-    let mut file_writer = OmFileWriter::new(&file_handle, 8);
+    let mut in_memory_backend = InMemoryBackend::new(vec![]);
+    let mut file_writer = OmFileWriter::new(in_memory_backend.borrow_mut(), 8);
     let mut writer = file_writer.prepare_array::<f32>(
         vec![5, 5],
         vec![2, 2],
@@ -158,8 +154,8 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
 
 #[test]
 fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest.om";
-    std::fs::remove_file(file).ok();
+    let file = "test_write_large.om";
+    remove_file_if_exists(file);
 
     // Set up the writer with the specified dimensions and chunk dimensions
     let dims = vec![100, 100, 10];
@@ -198,15 +194,16 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
 
     let a = read.read_simple(&[0..100, 0..100, 0..10], None, None)?;
     assert_eq!(a.len(), data.len());
-    let range = 0..100; // a.len() - 100..a.len() - 1
+    let range = 0..100;
     assert_eq!(a[range.clone()], data[range]);
 
+    remove_file_if_exists(file);
     Ok(())
 }
 
 #[test]
 fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest.om";
+    let file = "test_write_chunks.om";
     remove_file_if_exists(file);
 
     // Set up the writer with the specified dimensions and chunk dimensions
@@ -285,12 +282,13 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     //     ]
     // );
 
+    remove_file_if_exists(file);
     Ok(())
 }
 
 #[test]
 fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest.om";
+    let file = "test_offset_write.om";
     remove_file_if_exists(file);
 
     // Set up the writer with the specified dimensions and chunk dimensions
@@ -390,12 +388,13 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(a, expected);
 
+    remove_file_if_exists(file);
     Ok(())
 }
 
 #[test]
 fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest.om";
+    let file = "test_write_3d.om";
     remove_file_if_exists(file);
 
     let dims = vec![3, 3, 3];
@@ -500,12 +499,13 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
         &[79, 77, 3, 0, 0, 0, 0, 0, 88, 0, 0, 0, 0, 0, 0, 0, 124, 0, 0, 0, 0, 0, 0, 0]
     );
 
+    remove_file_if_exists(file);
     Ok(())
 }
 
 #[test]
 fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest.om";
+    let file = "test_write_v3.om";
     remove_file_if_exists(file);
 
     let dims = vec![5, 5];
@@ -680,12 +680,13 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         ]
     );
 
+    remove_file_if_exists(file);
     Ok(())
 }
 
 #[test]
 fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest.om";
+    let file = "test_write_v3_max_io_limit.om";
     remove_file_if_exists(file);
 
     // Define dimensions and writer parameters
@@ -849,12 +850,13 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(value, expected);
     }
 
+    remove_file_if_exists(file);
     Ok(())
 }
 
 #[test]
 fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest_nan.om";
+    let file = "test_nan.om";
     remove_file_if_exists(file);
 
     let data: Vec<f32> = (0..(5 * 5)).map(|_| f32::NAN).collect();
@@ -884,6 +886,7 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
     let values = reader.read_simple(&[1..2, 1..2], None, None)?;
     assert!(values.iter().all(|x| x.is_nan()));
 
+    remove_file_if_exists(file);
     Ok(())
 }
 
