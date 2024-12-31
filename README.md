@@ -1,11 +1,8 @@
 # omfiles-rs
 
-WIP reader and writer implementation for the `om` file format.
+Reader and Writer implementation for the `om` file format.
 
-The file format is documented in the [open-meteo/open-data](https://github.com/open-meteo/open-data/blob/0ddd57363cee1f7664197b915aaad2d15007b079/README.md#file-format) repository and in the [open-meteo source code](https://github.com/open-meteo/open-meteo/blob/3e4c22c0b61919752c7a53d0e60ecb2a86b94f41/Sources/SwiftPFor2D/SwiftPFor2D.swift).
-
-This code depends on [turbo-pfor](https://github.com/powturbo/TurboPFor-Integer-Compression), which is a C library for fast integer compression.
-There are custom bindings to this code in [turbopfor-om-rs](https://github.com/terraputix/turbopfor-om-rs) (currently not published on crates.io).
+The file format is documented in the [open-meteo/om-file-format](https://github.com/open-meteo/om-file-format/blob/main/README.md) repository.
 
 ## Development
 
@@ -13,9 +10,24 @@ There are custom bindings to this code in [turbopfor-om-rs](https://github.com/t
 cargo test
 ```
 
-## Reading OM Files
+## Reading files
 
-This project provides a `testread` binary that can be used to read OM files:
+Assuming the file `data.om` directly contains a floating point array with 3 dimensions
+
+```rust
+use omfiles_rs::io::reader::OmFileReader;
+
+let file = "data.om";
+let reader = OmFileReader::from_file(file).expect(format!("Failed to open file: {}", file).as_str());
+// read root variable into float array
+let data = reader.read::<f32>(&[50u64..51, 20..21, 10..200], None, None).expect("Failed to read data");
+
+// Metadata information
+let dimensions = reader.get_dimensions();
+let chunk_size = reader.get_chunk_dimensions();
+println!("Dimensions: {:?}", dimensions);
+println!("Chunk size: {:?}", chunk_size);
+```
 
 ```bash
 cargo run --bin testread era5land_temp2m_chunk_951.om 1..2 0..104
