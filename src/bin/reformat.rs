@@ -23,7 +23,7 @@ fn main() -> io::Result<()> {
     println!("scale_factor: {}", reader.scale_factor());
 
     let control_data_original = reader
-        .read_simple(
+        .read::<f32>(
             &[control_range_dim0.clone(), control_range_dim1.clone()],
             None,
             None,
@@ -61,7 +61,7 @@ fn main() -> io::Result<()> {
         let chunk_dim_0 = std::cmp::min(rechunked_dimensions[0], dimensions[0] - chunk_start);
 
         let chunk_data = reader
-            .read_simple(
+            .read::<f32>(
                 &[chunk_start..chunk_start + chunk_dim_0, 0..dimensions[1]],
                 None,
                 None,
@@ -103,7 +103,7 @@ fn main() -> io::Result<()> {
         .expect(format!("Failed to open file: {}", output_file_path).as_str());
 
     let control_data_new = reader
-        .read_simple(
+        .read::<f32>(
             &[control_range_dim0.clone(), control_range_dim1.clone()],
             None,
             None,

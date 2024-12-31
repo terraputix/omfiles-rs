@@ -114,7 +114,7 @@ pub fn benchmark_read(c: &mut Criterion) {
             let random_x: u64 = rand::thread_rng().gen_range(0..DIM0_SIZE - dim0_read_size);
             let random_y: u64 = rand::thread_rng().gen_range(0..DIM1_SIZE);
             let values = reader
-                .read_simple(
+                .read::<f32>(
                     &[random_x..random_x + dim0_read_size, random_y..random_y + 1],
                     None,
                     None,

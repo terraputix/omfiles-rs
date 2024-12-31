@@ -245,17 +245,21 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         Ok(())
     }
 
-    pub fn read_simple(
+    pub fn read<T: OmFileArrayDataType>(
         &self,
         dim_read: &[Range<u64>],
         io_size_max: Option<u64>,
         io_size_merge: Option<u64>,
-    ) -> Result<Vec<f32>, OmFilesRsError> {
+    ) -> Result<Vec<T>, OmFilesRsError> {
         let out_dims: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
         let n = out_dims.iter().product::<u64>() as usize;
-        let mut out = vec![f32::NAN; n];
+        let mut out = Vec::with_capacity(n as usize);
 
-        self.read_into::<f32>(
+        unsafe {
+            out.set_len(n as usize);
+        }
+
+        self.read_into::<T>(
             &mut out,
             dim_read,
             &vec![0; dim_read.len()],

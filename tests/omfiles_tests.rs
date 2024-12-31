@@ -89,7 +89,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(in_memory_backend.count(), 136);
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
-    let uncompressed = read.read_simple(&[0u64..1, 0..data.len() as u64], None, None)?;
+    let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
     assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
 
@@ -124,7 +124,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
 
     assert_eq!(in_memory_backend.count(), 160);
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
-    let uncompressed = read.read_simple(&[0u64..1, 0..data.len() as u64], None, None)?;
+    let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
     assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
 
@@ -189,10 +189,10 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
 
     let read = OmFileReader::new(Arc::new(read_backend))?;
 
-    let a1 = read.read_simple(&[50..51, 20..21, 1..2], None, None)?;
+    let a1 = read.read::<f32>(&[50..51, 20..21, 1..2], None, None)?;
     assert_eq!(a1, vec![201.0]);
 
-    let a = read.read_simple(&[0..100, 0..100, 0..10], None, None)?;
+    let a = read.read::<f32>(&[0..100, 0..100, 0..10], None, None)?;
     assert_eq!(a.len(), data.len());
     let range = 0..100;
     assert_eq!(a[range.clone()], data[range]);
@@ -248,7 +248,7 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
 
     let read = OmFileReader::new(backend.clone())?;
 
-    let a = read.read_simple(&[0..5, 0..5], None, None)?;
+    let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
     let expected = vec![
         0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
@@ -378,7 +378,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(read_backend))?;
 
     // Read the data
-    let a = read.read_simple(&[0..5, 0..5], None, None)?;
+    let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
 
     // Expected data
     let expected = vec![
@@ -447,14 +447,14 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
 
     assert!(read.get_child(2).is_none());
 
-    let a = read.read_simple(&[0..3, 0..3, 0..3], None, None)?;
+    let a = read.read::<f32>(&[0..3, 0..3, 0..3], None, None)?;
     assert_eq!(a, data);
 
     // Single index checks
     for x in 0..dims[0] {
         for y in 0..dims[1] {
             for z in 0..dims[2] {
-                let value = read.read_simple(&[x..x + 1, y..y + 1, z..z + 1], None, None)?;
+                let value = read.read::<f32>(&[x..x + 1, y..y + 1, z..z + 1], None, None)?;
                 assert_eq!(value, vec![(x * 9 + y * 3 + z) as f32]);
             }
         }
@@ -539,8 +539,8 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     let backend = Arc::new(read_backend);
     let read = OmFileReader::new(backend.clone())?;
 
-    // Rest of test remains the same but using read.read_simple() instead of read_var.read()
-    let a = read.read_simple(&[0..5, 0..5], None, None)?;
+    // Rest of test remains the same but using read.read::<f32>() instead of read_var.read()
+    let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
     let expected = vec![
         0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
@@ -550,7 +550,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     // Single index checks
     for x in 0..5 {
         for y in 0..5 {
-            let value = read.read_simple(&[x..x + 1, y..y + 1], None, None)?;
+            let value = read.read::<f32>(&[x..x + 1, y..y + 1], None, None)?;
             assert_eq!(value, vec![(x * 5 + y) as f32]);
         }
     }
@@ -582,11 +582,11 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Rest of checks with read.read_simple()
+    // Rest of checks with read.read::<f32>()
     // 2x in fast dimension
     for x in 0..5 {
         for y in 0..4 {
-            let value = read.read_simple(&[x..x + 1, y..y + 2], None, None)?;
+            let value = read.read::<f32>(&[x..x + 1, y..y + 2], None, None)?;
             assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
         }
     }
@@ -594,7 +594,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     // 2x in slow dimension
     for x in 0..4 {
         for y in 0..5 {
-            let value = read.read_simple(&[x..x + 2, y..y + 1], None, None)?;
+            let value = read.read::<f32>(&[x..x + 2, y..y + 1], None, None)?;
             assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
         }
     }
@@ -602,7 +602,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     // 2x2 regions
     for x in 0..4 {
         for y in 0..4 {
-            let value = read.read_simple(&[x..x + 2, y..y + 2], None, None)?;
+            let value = read.read::<f32>(&[x..x + 2, y..y + 2], None, None)?;
             assert_eq!(
                 value,
                 vec![
@@ -618,7 +618,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     // 3x3 regions
     for x in 0..3 {
         for y in 0..3 {
-            let value = read.read_simple(&[x..x + 3, y..y + 3], None, None)?;
+            let value = read.read::<f32>(&[x..x + 3, y..y + 3], None, None)?;
             assert_eq!(
                 value,
                 vec![
@@ -638,7 +638,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1x5 regions
     for x in 0..5 {
-        let value = read.read_simple(&[x..x + 1, 0..5], None, None)?;
+        let value = read.read::<f32>(&[x..x + 1, 0..5], None, None)?;
         assert_eq!(
             value,
             vec![
@@ -653,7 +653,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5x1 regions
     for x in 0..5 {
-        let value = read.read_simple(&[0..5, x..x + 1], None, None)?;
+        let value = read.read::<f32>(&[0..5, x..x + 1], None, None)?;
         assert_eq!(
             value,
             vec![
@@ -729,7 +729,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(read_backend))?;
 
     // Read with io_size_max: 0, io_size_merge: 0
-    let a = read.read_simple(&[0..5, 0..5], Some(0), Some(0))?;
+    let a = read.read::<f32>(&[0..5, 0..5], Some(0), Some(0))?;
     let expected = vec![
         0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
@@ -739,7 +739,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     // Single index checks
     for x in 0..dims[0] {
         for y in 0..dims[1] {
-            let value = read.read_simple(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
+            let value = read.read::<f32>(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
             assert_eq!(value, vec![(x * 5 + y) as f32]);
         }
     }
@@ -774,7 +774,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     // 2x in fast dimension
     for x in 0..dims[0] {
         for y in 0..dims[1] - 1 {
-            let value = read.read_simple(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
+            let value = read.read::<f32>(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
             assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
         }
     }
@@ -782,7 +782,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     // 2x in slow dimension
     for x in 0..dims[0] - 1 {
         for y in 0..dims[1] {
-            let value = read.read_simple(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
+            let value = read.read::<f32>(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
             assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
         }
     }
@@ -790,7 +790,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     // 2x2
     for x in 0..dims[0] - 1 {
         for y in 0..dims[1] - 1 {
-            let value = read.read_simple(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
+            let value = read.read::<f32>(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
             assert_eq!(
                 value,
                 vec![
@@ -806,7 +806,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     // 3x3
     for x in 0..dims[0] - 2 {
         for y in 0..dims[1] - 2 {
-            let value = read.read_simple(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
+            let value = read.read::<f32>(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
             assert_eq!(
                 value,
                 vec![
@@ -826,7 +826,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1x5
     for x in 0..dims[1] {
-        let value = read.read_simple(&[x..x + 1, 0..5], Some(0), Some(0))?;
+        let value = read.read::<f32>(&[x..x + 1, 0..5], Some(0), Some(0))?;
         let expected = vec![
             (x * 5) as f32,
             (x * 5 + 1) as f32,
@@ -839,7 +839,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 
     // 5x1
     for x in 0..dims[0] {
-        let value = read.read_simple(&[0..5, x..x + 1], Some(0), Some(0))?;
+        let value = read.read::<f32>(&[0..5, x..x + 1], Some(0), Some(0))?;
         let expected = vec![
             x as f32,
             (x + 5) as f32,
@@ -883,7 +883,7 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
     let reader = OmFileReader::new(Arc::new(read_backend))?;
 
     // Assert that all values in the specified range are NaN
-    let values = reader.read_simple(&[1..2, 1..2], None, None)?;
+    let values = reader.read::<f32>(&[1..2, 1..2], None, None)?;
     assert!(values.iter().all(|x| x.is_nan()));
 
     remove_file_if_exists(file);
