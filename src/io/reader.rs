@@ -18,7 +18,7 @@ use std::ops::Range;
 use std::os::raw::c_void;
 use std::sync::Arc;
 
-pub struct OmFileReader2<Backend: OmFileReaderBackend> {
+pub struct OmFileReader<Backend: OmFileReaderBackend> {
     /// The backend that provides data via the get_bytes method
     pub backend: Arc<Backend>,
     /// Holds the data of the header, is not supposed to go out of scope
@@ -30,7 +30,7 @@ pub struct OmFileReader2<Backend: OmFileReaderBackend> {
     pub variable: *const OmVariable_t,
 }
 
-impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
+impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     #[allow(non_upper_case_globals)]
     pub fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() } as u64;
@@ -268,7 +268,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader2<Backend> {
     }
 }
 
-impl OmFileReader2<MmapFile> {
+impl OmFileReader<MmapFile> {
     /// Convenience initializer to create an `OmFileReader` from a file path.
     pub fn from_file(file: &str) -> Result<Self, OmFilesRsError> {
         let file_handle = File::open(file).map_err(|e| OmFilesRsError::CannotOpenFile {

@@ -4,8 +4,8 @@
 //!
 pub mod io {
     pub mod buffered_writer;
-    pub mod reader2;
-    pub mod writer2;
+    pub mod reader;
+    pub mod writer;
 }
 
 pub mod core {

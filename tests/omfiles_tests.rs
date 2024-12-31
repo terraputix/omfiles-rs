@@ -6,9 +6,9 @@ use omfiles_rs::{
         backend::mmapfile::{MmapFile, Mode},
         errors::OmFilesRsError,
         // io::reader::OmFileReader,
-        io::reader2::OmFileReader2,
+        io::reader::OmFileReader,
         // io::writer::OmFileWriter,
-        io::writer2::OmFileWriter2,
+        io::writer::OmFileWriter,
     },
 };
 
@@ -180,7 +180,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the writer
     let file_handle = File::create(file)?;
-    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut file_writer = OmFileWriter::new(&file_handle, 8);
     let mut writer = file_writer
         .prepare_array::<f32>(
             dims.clone(),
@@ -201,7 +201,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-    let read = OmFileReader2::new(Arc::new(read_backend))?;
+    let read = OmFileReader::new(Arc::new(read_backend))?;
 
     let a1 = read.read_simple(&[50..51, 20..21, 1..2], None, None)?;
     assert_eq!(a1, vec![201.0]);
@@ -227,7 +227,7 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     let add_offset = 0.0;
 
     let file_handle = File::create(file)?;
-    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut file_writer = OmFileWriter::new(&file_handle, 8);
     let mut writer = file_writer
         .prepare_array::<f32>(
             dims.clone(),
@@ -259,7 +259,7 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
 
     let backend = Arc::new(read_backend);
 
-    let read = OmFileReader2::new(backend.clone())?;
+    let read = OmFileReader::new(backend.clone())?;
 
     let a = read.read_simple(&[0..5, 0..5], None, None)?;
     let expected = vec![
@@ -312,7 +312,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the writer
     let file_handle = File::create(file)?;
-    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut file_writer = OmFileWriter::new(&file_handle, 8);
     let mut writer = file_writer
         .prepare_array::<f32>(
             dims.clone(),
@@ -387,7 +387,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
     // Read the file
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-    let read = OmFileReader2::new(Arc::new(read_backend))?;
+    let read = OmFileReader::new(Arc::new(read_backend))?;
 
     // Read the data
     let a = read.read_simple(&[0..5, 0..5], None, None)?;
@@ -420,7 +420,7 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     let file_handle = File::create(file)?;
-    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut file_writer = OmFileWriter::new(&file_handle, 8);
     let mut writer = file_writer
         .prepare_array::<f32>(
             dims.clone(),
@@ -444,7 +444,7 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
     let backend = Arc::new(read_backend);
-    let read = OmFileReader2::new(backend.clone())?;
+    let read = OmFileReader::new(backend.clone())?;
 
     assert_eq!(read.number_of_children(), 2);
 
@@ -525,7 +525,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     let add_offset = 0.0;
 
     let file_handle = File::create(file)?;
-    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut file_writer = OmFileWriter::new(&file_handle, 8);
     let mut writer = file_writer
         .prepare_array::<f32>(
             dims.clone(),
@@ -547,7 +547,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     let file_for_reading = File::open(file)?;
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
     let backend = Arc::new(read_backend);
-    let read = OmFileReader2::new(backend.clone())?;
+    let read = OmFileReader::new(backend.clone())?;
 
     // Rest of test remains the same but using read.read_simple() instead of read_var.read()
     let a = read.read_simple(&[0..5, 0..5], None, None)?;
@@ -707,7 +707,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 
     let file_handle = File::create(file)?;
 
-    let mut file_writer = OmFileWriter2::new(&file_handle, 8);
+    let mut file_writer = OmFileWriter::new(&file_handle, 8);
     let mut writer = file_writer
         .prepare_array::<f32>(
             dims.clone(),
@@ -735,7 +735,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
     // Initialize the reader using the open_file method
-    let read = OmFileReader2::new(Arc::new(read_backend))?;
+    let read = OmFileReader::new(Arc::new(read_backend))?;
 
     // Read with io_size_max: 0, io_size_merge: 0
     let a = read.read_simple(&[0..5, 0..5], Some(0), Some(0))?;
@@ -891,7 +891,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 //     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
 //     // Initialize the reader using the open_file method
-//     let read = OmFileReader2::new(Arc::new(read_backend))?;
+//     let read = OmFileReader::new(Arc::new(read_backend))?;
 //     let dims = read.get_dimensions();
 
 //     // Read the entire data back and assert equality
@@ -1212,7 +1212,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 //         _ => panic!("Not expected"),
 //     };
 
-//     OmFileWriter2::new(5, 5, 2, 2).write_to_file(
+//     OmFileWriter::new(5, 5, 2, 2).write_to_file(
 //         file,
 //         CompressionType::Fpxdec32,
 //         1.0,
@@ -1220,7 +1220,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 //         supply_chunk,
 //     )?;
 
-//     let reader = OmFileReader2::from_file(file)?;
+//     let reader = OmFileReader::from_file(file)?;
 //     let a = reader.read_simple(&[0u64..5, 0..5], None, None)?;
 //     assert_eq!(
 //         a,

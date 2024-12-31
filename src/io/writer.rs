@@ -27,11 +27,11 @@ impl OmOffsetSize {
     }
 }
 
-pub struct OmFileWriter2<FileHandle: OmFileWriterBackend> {
+pub struct OmFileWriter<FileHandle: OmFileWriterBackend> {
     buffer: OmBufferedWriter<FileHandle>,
 }
 
-impl<FileHandle: OmFileWriterBackend> OmFileWriter2<FileHandle> {
+impl<FileHandle: OmFileWriterBackend> OmFileWriter<FileHandle> {
     pub fn new(backend: FileHandle, initial_capacity: u64) -> Self {
         Self {
             buffer: OmBufferedWriter::new(backend, initial_capacity as usize),

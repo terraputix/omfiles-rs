@@ -1,6 +1,6 @@
 use omfiles_rs::core::compression::CompressionType;
-use omfiles_rs::io::reader2::OmFileReader2;
-use omfiles_rs::io::writer2::OmFileWriter2;
+use omfiles_rs::io::reader::OmFileReader;
+use omfiles_rs::io::writer::OmFileWriter;
 use std::fs::File;
 use std::io;
 
@@ -11,7 +11,7 @@ fn main() -> io::Result<()> {
     let output_file_path = "icond2_test_reformatted.om";
 
     // Read data from the input OM file
-    let reader = OmFileReader2::from_file(input_file_path)
+    let reader = OmFileReader::from_file(input_file_path)
         .expect(format!("Failed to open file: {}", input_file_path).as_str());
 
     let dimensions = reader.get_dimensions();
@@ -32,7 +32,7 @@ fn main() -> io::Result<()> {
 
     let file_handle = File::create(output_file_path).expect("Failed to create output file");
     // Write the compressed data to the output OM file
-    let mut file_writer = OmFileWriter2::new(
+    let mut file_writer = OmFileWriter::new(
         &file_handle,
         1024 * 1024 * 1024, // Initial capacity of 10MB
     );
@@ -99,7 +99,7 @@ fn main() -> io::Result<()> {
     println!("Finished writing");
 
     // Verify the output
-    let reader = OmFileReader2::from_file(output_file_path)
+    let reader = OmFileReader::from_file(output_file_path)
         .expect(format!("Failed to open file: {}", output_file_path).as_str());
 
     let control_data_new = reader
