@@ -1,18 +1,16 @@
 use omfileformatc_rs::{fpxdec32, fpxenc32};
 use omfiles_rs::{
-    core::compression::{p4ndec256_bound, p4nenc256_bound, CompressionType},
-    {
-        backend::backends::OmFileReaderBackend,
-        backend::mmapfile::{MmapFile, Mode},
-        errors::OmFilesRsError,
-        // io::reader::OmFileReader,
-        io::reader::OmFileReader,
-        // io::writer::OmFileWriter,
-        io::writer::OmFileWriter,
+    backend::{
+        backends::{InMemoryBackend, OmFileReaderBackend},
+        mmapfile::{MmapFile, Mode},
     },
+    core::compression::{p4ndec256_bound, p4nenc256_bound, CompressionType},
+    errors::OmFilesRsError,
+    io::{reader::OmFileReader, writer::OmFileWriter},
 };
 
 use std::{
+    borrow::BorrowMut,
     f32::{self},
     fs::{self, File},
     rc::Rc,
@@ -64,70 +62,75 @@ fn turbo_pfor_roundtrip() {
     assert_eq!(data[..length], decompressed[..length]);
 }
 
-// #[test]
-// fn test_write_empty_array_throws() -> Result<(), Box<dyn std::error::Error>> {
-//     let data: Vec<f32> = vec![];
-//     let compressed = OmFileWriter::new(0, 0, 0, 0).write_all_in_memory(
-//         CompressionType::P4nzdec256,
-//         1.0,
-//         Rc::new(data),
-//     );
-//     // make sure there was an error and it is of the correct type
-//     assert!(compressed.is_err());
-//     let err = compressed.err().unwrap();
-//     // make sure the error is of the correct type
-//     assert_eq!(err, OmFilesRsError::DimensionMustBeLargerThan0);
+#[test]
+fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
+    let data: Vec<f32> = vec![
+        0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
+        17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+    ];
+    let must_equal = data.clone();
+    let mut in_memory_backend = InMemoryBackend::new(vec![]);
+    let mut file_writer = OmFileWriter::new(in_memory_backend.borrow_mut(), 8);
 
-//     Ok(())
-// }
+    let mut writer = file_writer
+        .prepare_array::<f32>(
+            vec![1, data.len() as u64],
+            vec![1, 10],
+            CompressionType::P4nzdec256,
+            1.0,
+            0.0,
+        )
+        .expect("Could not prepare writer");
 
-// #[test]
-// fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
-//     let data: Vec<f32> = vec![
-//         0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
-//         17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-//     ];
-//     let must_equal = data.clone();
-//     let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
-//         CompressionType::P4nzdec256,
-//         1.0,
-//         Rc::new(data),
-//     )?;
+    writer.write_data(&data, None, None, None)?;
+    let variable_meta = writer.finalize();
+    let variable = file_writer.write_array(variable_meta, "data", &[])?;
+    file_writer.write_trailer(variable)?;
+    drop(file_writer); // drop file_writer to release mutable borrow
 
-//     assert_eq!(compressed.count(), 212);
+    assert_eq!(in_memory_backend.count(), 136);
+    let read = OmFileReader::new(Arc::new(in_memory_backend))?;
+    let uncompressed = read.read_simple(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-//     let uncompressed = OmFileReader::new(compressed)
-//         .expect("Could not get data from backend")
-//         .read_all()?;
+    assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
 
-//     assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
+    Ok(())
+}
 
-//     Ok(())
-// }
+#[test]
+fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
+    let data: Vec<f32> = vec![
+        0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
+        17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+    ];
+    let must_equal = data.clone();
+    let mut in_memory_backend = InMemoryBackend::new(vec![]);
+    let mut file_writer = OmFileWriter::new(in_memory_backend.borrow_mut(), 8);
 
-// #[test]
-// fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
-//     let data: Vec<f32> = vec![
-//         0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
-//         17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-//     ];
-//     let must_equal = data.clone();
-//     let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
-//         CompressionType::Fpxdec32,
-//         1.0,
-//         Rc::new(data),
-//     )?;
+    let mut writer = file_writer
+        .prepare_array::<f32>(
+            vec![1, data.len() as u64],
+            vec![1, 10],
+            CompressionType::Fpxdec32,
+            1.0,
+            0.0,
+        )
+        .expect("Could not prepare writer");
 
-//     assert_eq!(compressed.count(), 236);
+    writer.write_data(&data, None, None, None)?;
+    let variable_meta = writer.finalize();
+    let variable = file_writer.write_array(variable_meta, "data", &[])?;
+    file_writer.write_trailer(variable)?;
+    drop(file_writer); // drop file_writer to release mutable borrow
 
-//     let uncompressed = OmFileReader::new(compressed)
-//         .expect("Could not get data from backend")
-//         .read_all()?;
+    assert_eq!(in_memory_backend.count(), 160);
+    let read = OmFileReader::new(Arc::new(in_memory_backend))?;
+    let uncompressed = read.read_simple(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-//     assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
+    assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
 
-//     Ok(())
-// }
+    Ok(())
+}
 
 // #[test]
 // fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>> {

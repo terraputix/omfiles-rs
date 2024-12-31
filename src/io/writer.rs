@@ -27,12 +27,12 @@ impl OmOffsetSize {
     }
 }
 
-pub struct OmFileWriter<FileHandle: OmFileWriterBackend> {
-    buffer: OmBufferedWriter<FileHandle>,
+pub struct OmFileWriter<Backend: OmFileWriterBackend> {
+    buffer: OmBufferedWriter<Backend>,
 }
 
-impl<FileHandle: OmFileWriterBackend> OmFileWriter<FileHandle> {
-    pub fn new(backend: FileHandle, initial_capacity: u64) -> Self {
+impl<Backend: OmFileWriterBackend> OmFileWriter<Backend> {
+    pub fn new(backend: Backend, initial_capacity: u64) -> Self {
         Self {
             buffer: OmBufferedWriter::new(backend, initial_capacity as usize),
         }
@@ -99,7 +99,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter<FileHandle> {
         compression: CompressionType,
         scale_factor: f32,
         add_offset: f32,
-    ) -> Result<OmFileWriterArray<T, FileHandle>, OmFilesRsError> {
+    ) -> Result<OmFileWriterArray<T, Backend>, OmFilesRsError> {
         let _ = &self.write_header_if_required()?;
 
         Ok(OmFileWriterArray::new(
@@ -182,7 +182,7 @@ impl<FileHandle: OmFileWriterBackend> OmFileWriter<FileHandle> {
     }
 }
 
-pub struct OmFileWriterArray<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend> {
+pub struct OmFileWriterArray<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend> {
     look_up_table: Vec<u64>,
     encoder: OmEncoder_t,
     chunk_index: u64,
@@ -194,11 +194,11 @@ pub struct OmFileWriterArray<'a, OmType: OmFileArrayDataType, FileHandle: OmFile
     chunks: Vec<u64>,
     compressed_chunk_buffer_size: u64,
     chunk_buffer: Vec<u8>,
-    buffer: &'a mut OmBufferedWriter<FileHandle>,
+    buffer: &'a mut OmBufferedWriter<Backend>,
 }
 
-impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
-    OmFileWriterArray<'a, OmType, FileHandle>
+impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
+    OmFileWriterArray<'a, OmType, Backend>
 {
     /// `lut_chunk_element_count` should be 256 for production files.
     pub fn new(
@@ -208,7 +208,7 @@ impl<'a, OmType: OmFileArrayDataType, FileHandle: OmFileWriterBackend>
         data_type: DataType,
         scale_factor: f32,
         add_offset: f32,
-        buffer: &'a mut OmBufferedWriter<FileHandle>,
+        buffer: &'a mut OmBufferedWriter<Backend>,
     ) -> Self {
         // Verify OmType matches data_type
         assert_eq!(OmType::DATA_TYPE_ARRAY, data_type, "Data type mismatch");
