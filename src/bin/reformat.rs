@@ -1,70 +1,117 @@
 use omfiles_rs::core::compression::CompressionType;
 use omfiles_rs::io::reader::OmFileReader;
 use omfiles_rs::io::writer::OmFileWriter;
-use std::{
-    io::{self},
-    rc::Rc,
-};
+use std::fs::File;
+use std::io;
 
 fn main() -> io::Result<()> {
-    let control_range_dim0 = Some(10000..10001);
-    let control_range_dim1 = Some(0..100);
+    let control_range_dim0 = 10000..10001;
+    let control_range_dim1 = 0..100;
     let input_file_path = "icond2_temp2m_chunk_3960.om";
     let output_file_path = "icond2_test_reformatted.om";
 
     // Read data from the input OM file
     let reader = OmFileReader::from_file(input_file_path)
         .expect(format!("Failed to open file: {}", input_file_path).as_str());
-    println!("compression: {:?}", reader.compression);
-    println!("dim0: {:}", reader.dimensions.dim0);
-    println!("dim1: {:}", reader.dimensions.dim1);
-    println!("chunk0: {:}", reader.dimensions.chunk0);
-    println!("chunk1: {:}", reader.dimensions.chunk1);
-    println!("scalefactor: {:}", reader.scale_factor);
+
+    let dimensions = reader.get_dimensions();
+    let chunks = reader.get_chunk_dimensions();
+
+    println!("compression: {:?}", reader.compression());
+    println!("dimensions: {:?}", dimensions);
+    println!("chunks: {:?}", chunks);
+    println!("scale_factor: {}", reader.scale_factor());
 
     let control_data_original = reader
-        .read_range(control_range_dim0.clone(), control_range_dim1.clone())
+        .read::<f32>(
+            &[control_range_dim0.clone(), control_range_dim1.clone()],
+            None,
+            None,
+        )
         .expect("Failed to read defined data ranges");
 
+    let file_handle = File::create(output_file_path).expect("Failed to create output file");
     // Write the compressed data to the output OM file
-    let writer = OmFileWriter::new(
-        reader.dimensions.dim0,
-        reader.dimensions.dim1,
-        reader.dimensions.chunk0,
-        reader.dimensions.chunk1,
+    let mut file_writer = OmFileWriter::new(
+        &file_handle,
+        1024 * 1024 * 1024, // Initial capacity of 10MB
     );
+    println!("created writer");
 
-    let supply_chunk = |chunk_start_pos| {
-        let chunk_end_pos = std::cmp::min(writer.dim0, chunk_start_pos + writer.chunk0);
-        let chunk_data = reader
-            .read_range(Some(chunk_start_pos..chunk_end_pos), None)
-            .expect("Failed to read data");
+    // let rechunked_dimensions = vec![50, 121];
+    // let rechunked_dimensions = chunks.iter().map(|&x| x).collect::<Vec<_>>();
+    // let rechunked_dimensions = vec![chunks[0], chunks[1]];
+    let rechunked_dimensions = vec![dimensions[0], dimensions[1]];
 
-        let shared_chunk_data: Rc<Vec<f32>> = Rc::from(chunk_data);
-
-        Ok(shared_chunk_data.clone())
-    };
-
-    writer
-        .write_to_file(
-            &output_file_path,
-            CompressionType::P4nzdec256logarithmic,
-            2000.0,
-            true,
-            supply_chunk,
+    let mut writer = file_writer
+        .prepare_array::<f32>(
+            dimensions.to_vec(),
+            rechunked_dimensions.clone(),
+            CompressionType::P4nzdec256,
+            reader.scale_factor(),
+            reader.add_offset(),
         )
-        .expect("Failed to write data to output file");
+        .expect("Failed to prepare array");
 
-    // read some data from the file to verify the output
+    println!("prepared array");
+
+    // Read and write data in chunks
+    // Iterate over both chunk dimensions at once
+    for chunk_start in (0..dimensions[0]).step_by(rechunked_dimensions[0] as usize) {
+        let chunk_dim_0 = std::cmp::min(rechunked_dimensions[0], dimensions[0] - chunk_start);
+
+        let chunk_data = reader
+            .read::<f32>(
+                &[chunk_start..chunk_start + chunk_dim_0, 0..dimensions[1]],
+                None,
+                None,
+            )
+            .expect("Failed to read chunk data");
+
+        writer
+            .write_data(
+                chunk_data.as_slice(),
+                Some(&[chunk_dim_0, dimensions[1]]),
+                None,
+                None,
+            )
+            .expect("Failed to write chunk data");
+    }
+
+    let variable_meta = writer.finalize();
+    println!("Finalized Array");
+
+    let variable = file_writer
+        .write_array(variable_meta, "data", &[])
+        .expect("Failed to write array metadata");
+    file_writer
+        .write_trailer(variable)
+        .expect("Failed to write trailer");
+
+    // let array_offset = writer
+    //     .write_array(finalized_array, "data", &[])
+    //     .expect("Failed to write array metadata");
+
+    // file_writer
+    //     .write_trailer(array_offset)
+    //     .expect("Failed to write trailer");
+
+    println!("Finished writing");
+
+    // Verify the output
     let reader = OmFileReader::from_file(output_file_path)
         .expect(format!("Failed to open file: {}", output_file_path).as_str());
 
-    let control_data_pico = reader
-        .read_range(control_range_dim0, control_range_dim1)
+    let control_data_new = reader
+        .read::<f32>(
+            &[control_range_dim0.clone(), control_range_dim1.clone()],
+            None,
+            None,
+        )
         .expect("Failed to read defined data ranges");
 
-    println!("data from newly written file: {:?}", control_data_pico);
-    assert_eq!(control_data_original, control_data_pico, "Data mismatch");
+    println!("data from newly written file: {:?}", control_data_new);
+    assert_eq!(control_data_original, control_data_new, "Data mismatch");
 
     Ok(())
 }
