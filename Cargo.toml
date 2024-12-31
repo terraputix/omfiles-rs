@@ -7,13 +7,13 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[[bin]]
-name = "testread"
-path = "src/bin/testread.rs"
+# [[bin]]
+# name = "testread"
+# path = "src/bin/testread.rs"
 
-[[bin]]
-name = "reformat"
-path = "src/bin/reformat.rs"
+# [[bin]]
+# name = "reformat"
+# path = "src/bin/reformat.rs"
 
 # some optimizations for binary/library size in release builds
 # compare: https://github.com/johnthagen/min-sized-rust

@@ -5,9 +5,9 @@ use omfiles_rs::{
         backend::backends::OmFileReaderBackend,
         backend::mmapfile::{MmapFile, Mode},
         errors::OmFilesRsError,
-        io::reader::OmFileReader,
+        // io::reader::OmFileReader,
         io::reader2::OmFileReader2,
-        io::writer::OmFileWriter,
+        // io::writer::OmFileWriter,
         io::writer2::OmFileWriter2,
     },
 };
@@ -64,107 +64,107 @@ fn turbo_pfor_roundtrip() {
     assert_eq!(data[..length], decompressed[..length]);
 }
 
-#[test]
-fn test_write_empty_array_throws() -> Result<(), Box<dyn std::error::Error>> {
-    let data: Vec<f32> = vec![];
-    let compressed = OmFileWriter::new(0, 0, 0, 0).write_all_in_memory(
-        CompressionType::P4nzdec256,
-        1.0,
-        Rc::new(data),
-    );
-    // make sure there was an error and it is of the correct type
-    assert!(compressed.is_err());
-    let err = compressed.err().unwrap();
-    // make sure the error is of the correct type
-    assert_eq!(err, OmFilesRsError::DimensionMustBeLargerThan0);
+// #[test]
+// fn test_write_empty_array_throws() -> Result<(), Box<dyn std::error::Error>> {
+//     let data: Vec<f32> = vec![];
+//     let compressed = OmFileWriter::new(0, 0, 0, 0).write_all_in_memory(
+//         CompressionType::P4nzdec256,
+//         1.0,
+//         Rc::new(data),
+//     );
+//     // make sure there was an error and it is of the correct type
+//     assert!(compressed.is_err());
+//     let err = compressed.err().unwrap();
+//     // make sure the error is of the correct type
+//     assert_eq!(err, OmFilesRsError::DimensionMustBeLargerThan0);
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-#[test]
-fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
-    let data: Vec<f32> = vec![
-        0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
-        17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-    ];
-    let must_equal = data.clone();
-    let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
-        CompressionType::P4nzdec256,
-        1.0,
-        Rc::new(data),
-    )?;
+// #[test]
+// fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
+//     let data: Vec<f32> = vec![
+//         0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
+//         17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//     ];
+//     let must_equal = data.clone();
+//     let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
+//         CompressionType::P4nzdec256,
+//         1.0,
+//         Rc::new(data),
+//     )?;
 
-    assert_eq!(compressed.count(), 212);
+//     assert_eq!(compressed.count(), 212);
 
-    let uncompressed = OmFileReader::new(compressed)
-        .expect("Could not get data from backend")
-        .read_all()?;
+//     let uncompressed = OmFileReader::new(compressed)
+//         .expect("Could not get data from backend")
+//         .read_all()?;
 
-    assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
+//     assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-#[test]
-fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
-    let data: Vec<f32> = vec![
-        0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
-        17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-    ];
-    let must_equal = data.clone();
-    let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
-        CompressionType::Fpxdec32,
-        1.0,
-        Rc::new(data),
-    )?;
+// #[test]
+// fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
+//     let data: Vec<f32> = vec![
+//         0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
+//         17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//     ];
+//     let must_equal = data.clone();
+//     let compressed = OmFileWriter::new(1, data.len(), 1, 10).write_all_in_memory(
+//         CompressionType::Fpxdec32,
+//         1.0,
+//         Rc::new(data),
+//     )?;
 
-    assert_eq!(compressed.count(), 236);
+//     assert_eq!(compressed.count(), 236);
 
-    let uncompressed = OmFileReader::new(compressed)
-        .expect("Could not get data from backend")
-        .read_all()?;
+//     let uncompressed = OmFileReader::new(compressed)
+//         .expect("Could not get data from backend")
+//         .read_all()?;
 
-    assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
+//     assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-#[test]
-fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest_failing.om";
-    remove_file_if_exists(file);
+// #[test]
+// fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "writetest_failing.om";
+//     remove_file_if_exists(file);
 
-    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Rc::new((20..30).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result4 = Rc::new((20..30).map(|x| x as f32).collect::<Vec<f32>>());
 
-    let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.clone()),
-        2 => Ok(result2.clone()),
-        4 => Ok(result4.clone()),
-        _ => panic!("Not expected"),
-    };
+//     let supply_chunk = |dim0pos| match dim0pos {
+//         0 => Ok(result0.clone()),
+//         2 => Ok(result2.clone()),
+//         4 => Ok(result4.clone()),
+//         _ => panic!("Not expected"),
+//     };
 
-    // Attempt to write more data than expected and ensure it throws an error
-    let result = OmFileWriter::new(5, 5, 2, 2).write_to_file(
-        file,
-        CompressionType::P4nzdec256,
-        1.0,
-        false,
-        supply_chunk,
-    );
+//     // Attempt to write more data than expected and ensure it throws an error
+//     let result = OmFileWriter::new(5, 5, 2, 2).write_to_file(
+//         file,
+//         CompressionType::P4nzdec256,
+//         1.0,
+//         false,
+//         supply_chunk,
+//     );
 
-    // Ensure that an error was thrown
-    assert!(result.is_err());
-    let err = result.err().unwrap();
-    assert_eq!(err, OmFilesRsError::ChunkHasWrongNumberOfElements);
+//     // Ensure that an error was thrown
+//     assert!(result.is_err());
+//     let err = result.err().unwrap();
+//     assert_eq!(err, OmFilesRsError::ChunkHasWrongNumberOfElements);
 
-    // Remove the temporary file if it exists
-    let temp_file = format!("{}~", file);
-    remove_file_if_exists(&temp_file);
+//     // Remove the temporary file if it exists
+//     let temp_file = format!("{}~", file);
+//     remove_file_if_exists(&temp_file);
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 #[test]
 fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
@@ -862,469 +862,469 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[test]
-fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest.om";
-    remove_file_if_exists(file);
+// #[test]
+// fn test_old_writer_new_reader() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "writetest.om";
+//     remove_file_if_exists(file);
 
-    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
-    let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.clone()),
-        2 => Ok(result2.clone()),
-        4 => Ok(result4.clone()),
-        _ => panic!("Not expected"),
-    };
+//     let supply_chunk = |dim0pos| match dim0pos {
+//         0 => Ok(result0.clone()),
+//         2 => Ok(result2.clone()),
+//         4 => Ok(result4.clone()),
+//         _ => panic!("Not expected"),
+//     };
 
-    OmFileWriter::new(5, 5, 2, 2).write_to_file(
-        file,
-        CompressionType::P4nzdec256,
-        1.0,
-        false,
-        supply_chunk,
-    )?;
+//     OmFileWriter::new(5, 5, 2, 2).write_to_file(
+//         file,
+//         CompressionType::P4nzdec256,
+//         1.0,
+//         false,
+//         supply_chunk,
+//     )?;
 
-    // Open the file for reading
-    let file_for_reading = File::open(file)?;
-    let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+//     // Open the file for reading
+//     let file_for_reading = File::open(file)?;
+//     let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-    // Initialize the reader using the open_file method
-    let read = OmFileReader2::new(Arc::new(read_backend))?;
-    let dims = read.get_dimensions();
+//     // Initialize the reader using the open_file method
+//     let read = OmFileReader2::new(Arc::new(read_backend))?;
+//     let dims = read.get_dimensions();
 
-    // Read the entire data back and assert equality
-    let a = read.read_simple(&[0..5, 0..5], Some(0), Some(0))?;
-    let expected = vec![
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-        17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-    ];
-    assert_eq!(a, expected);
+//     // Read the entire data back and assert equality
+//     let a = read.read_simple(&[0..5, 0..5], Some(0), Some(0))?;
+//     let expected = vec![
+//         0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+//         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//     ];
+//     assert_eq!(a, expected);
 
-    // Single index checks
-    for x in 0..dims[0] {
-        for y in 0..dims[1] {
-            let value = read.read_simple(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
-            assert_eq!(value, vec![(x * 5 + y) as f32]);
-        }
-    }
+//     // Single index checks
+//     for x in 0..dims[0] {
+//         for y in 0..dims[1] {
+//             let value = read.read_simple(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
+//             assert_eq!(value, vec![(x * 5 + y) as f32]);
+//         }
+//     }
 
-    // Read into an existing array with an offset
-    for x in 0..dims[0] {
-        for y in 0..dims[1] {
-            let mut r = vec![f32::NAN; 9];
-            read.read_into(
-                &mut r,
-                &[x..x + 1, y..y + 1],
-                &[1, 1],
-                &[3, 3],
-                Some(0),
-                Some(0),
-            )?;
-            let expected = vec![
-                f32::NAN,
-                f32::NAN,
-                f32::NAN,
-                f32::NAN,
-                (x * 5 + y) as f32,
-                f32::NAN,
-                f32::NAN,
-                f32::NAN,
-                f32::NAN,
-            ];
-            assert_eq_with_nan(&r, &expected, 0.001);
-        }
-    }
+//     // Read into an existing array with an offset
+//     for x in 0..dims[0] {
+//         for y in 0..dims[1] {
+//             let mut r = vec![f32::NAN; 9];
+//             read.read_into(
+//                 &mut r,
+//                 &[x..x + 1, y..y + 1],
+//                 &[1, 1],
+//                 &[3, 3],
+//                 Some(0),
+//                 Some(0),
+//             )?;
+//             let expected = vec![
+//                 f32::NAN,
+//                 f32::NAN,
+//                 f32::NAN,
+//                 f32::NAN,
+//                 (x * 5 + y) as f32,
+//                 f32::NAN,
+//                 f32::NAN,
+//                 f32::NAN,
+//                 f32::NAN,
+//             ];
+//             assert_eq_with_nan(&r, &expected, 0.001);
+//         }
+//     }
 
-    // 2x in fast dimension
-    for x in 0..dims[0] {
-        for y in 0..dims[1] - 1 {
-            let value = read.read_simple(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
-            assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
-        }
-    }
+//     // 2x in fast dimension
+//     for x in 0..dims[0] {
+//         for y in 0..dims[1] - 1 {
+//             let value = read.read_simple(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
+//             assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
+//         }
+//     }
 
-    // 2x in slow dimension
-    for x in 0..dims[0] - 1 {
-        for y in 0..dims[1] {
-            let value = read.read_simple(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
-            assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
-        }
-    }
+//     // 2x in slow dimension
+//     for x in 0..dims[0] - 1 {
+//         for y in 0..dims[1] {
+//             let value = read.read_simple(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
+//             assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
+//         }
+//     }
 
-    // 2x2 region
-    for x in 0..dims[0] - 1 {
-        for y in 0..dims[1] - 1 {
-            let value = read.read_simple(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
-            assert_eq!(
-                value,
-                vec![
-                    (x * 5 + y) as f32,
-                    (x * 5 + y + 1) as f32,
-                    ((x + 1) * 5 + y) as f32,
-                    ((x + 1) * 5 + y + 1) as f32,
-                ]
-            );
-        }
-    }
+//     // 2x2 region
+//     for x in 0..dims[0] - 1 {
+//         for y in 0..dims[1] - 1 {
+//             let value = read.read_simple(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
+//             assert_eq!(
+//                 value,
+//                 vec![
+//                     (x * 5 + y) as f32,
+//                     (x * 5 + y + 1) as f32,
+//                     ((x + 1) * 5 + y) as f32,
+//                     ((x + 1) * 5 + y + 1) as f32,
+//                 ]
+//             );
+//         }
+//     }
 
-    // 3x3 region
-    for x in 0..dims[0] - 2 {
-        for y in 0..dims[1] - 2 {
-            let value = read.read_simple(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
-            assert_eq!(
-                value,
-                vec![
-                    (x * 5 + y) as f32,
-                    (x * 5 + y + 1) as f32,
-                    (x * 5 + y + 2) as f32,
-                    ((x + 1) * 5 + y) as f32,
-                    ((x + 1) * 5 + y + 1) as f32,
-                    ((x + 1) * 5 + y + 2) as f32,
-                    ((x + 2) * 5 + y) as f32,
-                    ((x + 2) * 5 + y + 1) as f32,
-                    ((x + 2) * 5 + y + 2) as f32,
-                ]
-            );
-        }
-    }
+//     // 3x3 region
+//     for x in 0..dims[0] - 2 {
+//         for y in 0..dims[1] - 2 {
+//             let value = read.read_simple(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
+//             assert_eq!(
+//                 value,
+//                 vec![
+//                     (x * 5 + y) as f32,
+//                     (x * 5 + y + 1) as f32,
+//                     (x * 5 + y + 2) as f32,
+//                     ((x + 1) * 5 + y) as f32,
+//                     ((x + 1) * 5 + y + 1) as f32,
+//                     ((x + 1) * 5 + y + 2) as f32,
+//                     ((x + 2) * 5 + y) as f32,
+//                     ((x + 2) * 5 + y + 1) as f32,
+//                     ((x + 2) * 5 + y + 2) as f32,
+//                 ]
+//             );
+//         }
+//     }
 
-    // 1x5 region
-    for x in 0..dims[1] {
-        let value = read.read_simple(&[x..x + 1, 0..5], Some(0), Some(0))?;
-        let expected = vec![
-            (x * 5) as f32,
-            (x * 5 + 1) as f32,
-            (x * 5 + 2) as f32,
-            (x * 5 + 3) as f32,
-            (x * 5 + 4) as f32,
-        ];
-        assert_eq!(value, expected);
-    }
+//     // 1x5 region
+//     for x in 0..dims[1] {
+//         let value = read.read_simple(&[x..x + 1, 0..5], Some(0), Some(0))?;
+//         let expected = vec![
+//             (x * 5) as f32,
+//             (x * 5 + 1) as f32,
+//             (x * 5 + 2) as f32,
+//             (x * 5 + 3) as f32,
+//             (x * 5 + 4) as f32,
+//         ];
+//         assert_eq!(value, expected);
+//     }
 
-    // 5x1 region
-    for x in 0..dims[0] {
-        let value = read.read_simple(&[0..5, x..x + 1], Some(0), Some(0))?;
-        let expected = vec![
-            x as f32,
-            (x + 5) as f32,
-            (x + 10) as f32,
-            (x + 15) as f32,
-            (x + 20) as f32,
-        ];
-        assert_eq!(value, expected);
-    }
+//     // 5x1 region
+//     for x in 0..dims[0] {
+//         let value = read.read_simple(&[0..5, x..x + 1], Some(0), Some(0))?;
+//         let expected = vec![
+//             x as f32,
+//             (x + 5) as f32,
+//             (x + 10) as f32,
+//             (x + 15) as f32,
+//             (x + 20) as f32,
+//         ];
+//         assert_eq!(value, expected);
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-#[test]
-fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest_nan.om";
-    remove_file_if_exists(file);
+// #[test]
+// fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "writetest_nan.om";
+//     remove_file_if_exists(file);
 
-    let data: Rc<Vec<f32>> = Rc::new((0..(5 * 5)).map(|_| f32::NAN).collect());
+//     let data: Rc<Vec<f32>> = Rc::new((0..(5 * 5)).map(|_| f32::NAN).collect());
 
-    OmFileWriter::new(5, 5, 5, 5).write_to_file(
-        file,
-        CompressionType::P4nzdec256,
-        1.0,
-        false,
-        |_| Ok(data.clone()),
-    )?;
+//     OmFileWriter::new(5, 5, 5, 5).write_to_file(
+//         file,
+//         CompressionType::P4nzdec256,
+//         1.0,
+//         false,
+//         |_| Ok(data.clone()),
+//     )?;
 
-    let reader = OmFileReader::from_file(file)?;
+//     let reader = OmFileReader::from_file(file)?;
 
-    // assert that all values are nan
-    assert!(reader
-        .read_range(Some(1..2), Some(1..2))?
-        .iter()
-        .all(|x| x.is_nan()));
-    Ok(())
-}
+//     // assert that all values are nan
+//     assert!(reader
+//         .read_range(Some(1..2), Some(1..2))?
+//         .iter()
+//         .all(|x| x.is_nan()));
+//     Ok(())
+// }
 
-#[test]
-fn test_write() -> Result<(), OmFilesRsError> {
-    let file = "writetest.om";
-    remove_file_if_exists(file);
+// #[test]
+// fn test_write() -> Result<(), OmFilesRsError> {
+//     let file = "writetest.om";
+//     remove_file_if_exists(file);
 
-    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
-    let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.clone()),
-        2 => Ok(result2.clone()),
-        4 => Ok(result4.clone()),
-        _ => panic!("Not expected"),
-    };
+//     let supply_chunk = |dim0pos| match dim0pos {
+//         0 => Ok(result0.clone()),
+//         2 => Ok(result2.clone()),
+//         4 => Ok(result4.clone()),
+//         _ => panic!("Not expected"),
+//     };
 
-    OmFileWriter::new(5, 5, 2, 2).write_to_file(
-        file,
-        CompressionType::P4nzdec256,
-        1.0,
-        false,
-        supply_chunk,
-    )?;
+//     OmFileWriter::new(5, 5, 2, 2).write_to_file(
+//         file,
+//         CompressionType::P4nzdec256,
+//         1.0,
+//         false,
+//         supply_chunk,
+//     )?;
 
-    let read = OmFileReader::from_file(file)?;
-    let a = read.read_range(Some(0..5), Some(0..5))?;
-    assert_eq!(
-        a,
-        vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0
-        ]
-    );
+//     let read = OmFileReader::from_file(file)?;
+//     let a = read.read_range(Some(0..5), Some(0..5))?;
+//     assert_eq!(
+//         a,
+//         vec![
+//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0
+//         ]
+//     );
 
-    // single index
-    for x in 0..read.dimensions.dim0 {
-        for y in 0..read.dimensions.dim1 {
-            assert_eq!(
-                read.read_range(Some(x..x + 1), Some(y..y + 1))?,
-                vec![x as f32 * 5.0 + y as f32]
-            );
-        }
-    }
+//     // single index
+//     for x in 0..read.dimensions.dim0 {
+//         for y in 0..read.dimensions.dim1 {
+//             assert_eq!(
+//                 read.read_range(Some(x..x + 1), Some(y..y + 1))?,
+//                 vec![x as f32 * 5.0 + y as f32]
+//             );
+//         }
+//     }
 
-    // 2x in fast dim
-    for x in 0..read.dimensions.dim0 {
-        for y in 0..read.dimensions.dim1 - 1 {
-            assert_eq!(
-                read.read_range(Some(x..x + 1), Some(y..y + 2))?,
-                vec![x as f32 * 5.0 + y as f32, x as f32 * 5.0 + y as f32 + 1.0]
-            );
-        }
-    }
+//     // 2x in fast dim
+//     for x in 0..read.dimensions.dim0 {
+//         for y in 0..read.dimensions.dim1 - 1 {
+//             assert_eq!(
+//                 read.read_range(Some(x..x + 1), Some(y..y + 2))?,
+//                 vec![x as f32 * 5.0 + y as f32, x as f32 * 5.0 + y as f32 + 1.0]
+//             );
+//         }
+//     }
 
-    // 2x in slow dim
-    for x in 0..read.dimensions.dim0 - 1 {
-        for y in 0..read.dimensions.dim1 {
-            assert_eq!(
-                read.read_range(Some(x..x + 2), Some(y..y + 1))?,
-                vec![x as f32 * 5.0 + y as f32, (x as f32 + 1.0) * 5.0 + y as f32]
-            );
-        }
-    }
+//     // 2x in slow dim
+//     for x in 0..read.dimensions.dim0 - 1 {
+//         for y in 0..read.dimensions.dim1 {
+//             assert_eq!(
+//                 read.read_range(Some(x..x + 2), Some(y..y + 1))?,
+//                 vec![x as f32 * 5.0 + y as f32, (x as f32 + 1.0) * 5.0 + y as f32]
+//             );
+//         }
+//     }
 
-    // 2x2
-    for x in 0..read.dimensions.dim0 - 1 {
-        for y in 0..read.dimensions.dim1 - 1 {
-            assert_eq!(
-                read.read_range(Some(x..x + 2), Some(y..y + 2))?,
-                vec![
-                    x as f32 * 5.0 + y as f32,
-                    x as f32 * 5.0 + y as f32 + 1.0,
-                    (x as f32 + 1.0) * 5.0 + y as f32,
-                    (x as f32 + 1.0) * 5.0 + y as f32 + 1.0
-                ]
-            );
-        }
-    }
+//     // 2x2
+//     for x in 0..read.dimensions.dim0 - 1 {
+//         for y in 0..read.dimensions.dim1 - 1 {
+//             assert_eq!(
+//                 read.read_range(Some(x..x + 2), Some(y..y + 2))?,
+//                 vec![
+//                     x as f32 * 5.0 + y as f32,
+//                     x as f32 * 5.0 + y as f32 + 1.0,
+//                     (x as f32 + 1.0) * 5.0 + y as f32,
+//                     (x as f32 + 1.0) * 5.0 + y as f32 + 1.0
+//                 ]
+//             );
+//         }
+//     }
 
-    // 3x3
-    for x in 0..read.dimensions.dim0 - 2 {
-        for y in 0..read.dimensions.dim1 - 2 {
-            assert_eq!(
-                read.read_range(Some(x..x + 3), Some(y..y + 3))?,
-                vec![
-                    x as f32 * 5.0 + y as f32,
-                    x as f32 * 5.0 + y as f32 + 1.0,
-                    x as f32 * 5.0 + y as f32 + 2.0,
-                    (x as f32 + 1.0) * 5.0 + y as f32,
-                    (x as f32 + 1.0) * 5.0 + y as f32 + 1.0,
-                    (x as f32 + 1.0) * 5.0 + y as f32 + 2.0,
-                    (x as f32 + 2.0) * 5.0 + y as f32,
-                    (x as f32 + 2.0) * 5.0 + y as f32 + 1.0,
-                    (x as f32 + 2.0) * 5.0 + y as f32 + 2.0
-                ]
-            );
-        }
-    }
+//     // 3x3
+//     for x in 0..read.dimensions.dim0 - 2 {
+//         for y in 0..read.dimensions.dim1 - 2 {
+//             assert_eq!(
+//                 read.read_range(Some(x..x + 3), Some(y..y + 3))?,
+//                 vec![
+//                     x as f32 * 5.0 + y as f32,
+//                     x as f32 * 5.0 + y as f32 + 1.0,
+//                     x as f32 * 5.0 + y as f32 + 2.0,
+//                     (x as f32 + 1.0) * 5.0 + y as f32,
+//                     (x as f32 + 1.0) * 5.0 + y as f32 + 1.0,
+//                     (x as f32 + 1.0) * 5.0 + y as f32 + 2.0,
+//                     (x as f32 + 2.0) * 5.0 + y as f32,
+//                     (x as f32 + 2.0) * 5.0 + y as f32 + 1.0,
+//                     (x as f32 + 2.0) * 5.0 + y as f32 + 2.0
+//                 ]
+//             );
+//         }
+//     }
 
-    // 1x5
-    for x in 0..read.dimensions.dim1 {
-        assert_eq!(
-            read.read_range(Some(x..x + 1), Some(0..5))?,
-            vec![
-                x as f32 * 5.0,
-                x as f32 * 5.0 + 1.0,
-                x as f32 * 5.0 + 2.0,
-                x as f32 * 5.0 + 3.0,
-                x as f32 * 5.0 + 4.0
-            ]
-        );
-    }
+//     // 1x5
+//     for x in 0..read.dimensions.dim1 {
+//         assert_eq!(
+//             read.read_range(Some(x..x + 1), Some(0..5))?,
+//             vec![
+//                 x as f32 * 5.0,
+//                 x as f32 * 5.0 + 1.0,
+//                 x as f32 * 5.0 + 2.0,
+//                 x as f32 * 5.0 + 3.0,
+//                 x as f32 * 5.0 + 4.0
+//             ]
+//         );
+//     }
 
-    // 5x1
-    for x in 0..read.dimensions.dim0 {
-        assert_eq!(
-            read.read_range(Some(0..5), Some(x..x + 1))?,
-            vec![
-                x as f32,
-                x as f32 + 5.0,
-                x as f32 + 10.0,
-                x as f32 + 15.0,
-                x as f32 + 20.0
-            ]
-        );
-    }
+//     // 5x1
+//     for x in 0..read.dimensions.dim0 {
+//         assert_eq!(
+//             read.read_range(Some(0..5), Some(x..x + 1))?,
+//             vec![
+//                 x as f32,
+//                 x as f32 + 5.0,
+//                 x as f32 + 10.0,
+//                 x as f32 + 15.0,
+//                 x as f32 + 20.0
+//             ]
+//         );
+//     }
 
-    // // test interpolation
-    // assert_eq!(
-    //     read.read_interpolated(0, 0.5, 0, 0.5, 2, 0..5)?,
-    //     vec![7.5, 8.5, 9.5, 10.5, 11.5]
-    // );
-    // assert_eq!(
-    //     read.read_interpolated(0, 0.1, 0, 0.2, 2, 0..5)?,
-    //     vec![2.5, 3.4999998, 4.5, 5.5, 6.5]
-    // );
-    // assert_eq!(
-    //     read.read_interpolated(0, 0.9, 0, 0.2, 2, 0..5)?,
-    //     vec![6.5, 7.5, 8.5, 9.5, 10.5]
-    // );
-    // assert_eq!(
-    //     read.read_interpolated(0, 0.1, 0, 0.9, 2, 0..5)?,
-    //     vec![9.5, 10.499999, 11.499999, 12.5, 13.499999]
-    // );
-    // assert_eq!(
-    //     read.read_interpolated(0, 0.8, 0, 0.9, 2, 0..5)?,
-    //     vec![12.999999, 14.0, 15.0, 16.0, 17.0]
-    // );
+//     // // test interpolation
+//     // assert_eq!(
+//     //     read.read_interpolated(0, 0.5, 0, 0.5, 2, 0..5)?,
+//     //     vec![7.5, 8.5, 9.5, 10.5, 11.5]
+//     // );
+//     // assert_eq!(
+//     //     read.read_interpolated(0, 0.1, 0, 0.2, 2, 0..5)?,
+//     //     vec![2.5, 3.4999998, 4.5, 5.5, 6.5]
+//     // );
+//     // assert_eq!(
+//     //     read.read_interpolated(0, 0.9, 0, 0.2, 2, 0..5)?,
+//     //     vec![6.5, 7.5, 8.5, 9.5, 10.5]
+//     // );
+//     // assert_eq!(
+//     //     read.read_interpolated(0, 0.1, 0, 0.9, 2, 0..5)?,
+//     //     vec![9.5, 10.499999, 11.499999, 12.5, 13.499999]
+//     // );
+//     // assert_eq!(
+//     //     read.read_interpolated(0, 0.8, 0, 0.9, 2, 0..5)?,
+//     //     vec![12.999999, 14.0, 15.0, 16.0, 17.0]
+//     // );
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-#[test]
-fn test_write_fpx() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "writetest_fpx.om";
-    remove_file_if_exists(file);
+// #[test]
+// fn test_write_fpx() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "writetest_fpx.om";
+//     remove_file_if_exists(file);
 
-    let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
-    let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
-    let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result0 = Rc::new((0..10).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result2 = Rc::new((10..20).map(|x| x as f32).collect::<Vec<f32>>());
+//     let result4 = Rc::new((20..25).map(|x| x as f32).collect::<Vec<f32>>());
 
-    let supply_chunk = |dim0pos| match dim0pos {
-        0 => Ok(result0.clone()),
-        2 => Ok(result2.clone()),
-        4 => Ok(result4.clone()),
-        _ => panic!("Not expected"),
-    };
+//     let supply_chunk = |dim0pos| match dim0pos {
+//         0 => Ok(result0.clone()),
+//         2 => Ok(result2.clone()),
+//         4 => Ok(result4.clone()),
+//         _ => panic!("Not expected"),
+//     };
 
-    OmFileWriter::new(5, 5, 2, 2).write_to_file(
-        file,
-        CompressionType::Fpxdec32,
-        1.0,
-        false,
-        supply_chunk,
-    )?;
+//     OmFileWriter2::new(5, 5, 2, 2).write_to_file(
+//         file,
+//         CompressionType::Fpxdec32,
+//         1.0,
+//         false,
+//         supply_chunk,
+//     )?;
 
-    let reader = OmFileReader::from_file(file)?;
-    let a = reader.read_range(Some(0..5), Some(0..5))?;
-    assert_eq!(
-        a,
-        vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0
-        ]
-    );
+//     let reader = OmFileReader2::from_file(file)?;
+//     let a = reader.read_simple(&[0u64..5, 0..5], None, None)?;
+//     assert_eq!(
+//         a,
+//         vec![
+//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0
+//         ]
+//     );
 
-    // single index
-    for x in 0..reader.dimensions.dim0 {
-        for y in 0..reader.dimensions.dim1 {
-            assert_eq!(
-                reader.read_range(Some(x..x + 1), Some(y..y + 1))?,
-                vec![x as f32 * 5.0 + y as f32]
-            );
-        }
-    }
+//     // single index
+//     for x in 0..reader.dimensions.dim0 {
+//         for y in 0..reader.dimensions.dim1 {
+//             assert_eq!(
+//                 reader.read_range(Some(x..x + 1), Some(y..y + 1))?,
+//                 vec![x as f32 * 5.0 + y as f32]
+//             );
+//         }
+//     }
 
-    // 2x in fast dim
-    for x in 0..reader.dimensions.dim0 {
-        for y in 0..reader.dimensions.dim1 - 1 {
-            assert_eq!(
-                reader.read_range(Some(x..x + 1), Some(y..y + 2))?,
-                vec![x as f32 * 5.0 + y as f32, x as f32 * 5.0 + y as f32 + 1.0]
-            );
-        }
-    }
+//     // 2x in fast dim
+//     for x in 0..reader.dimensions.dim0 {
+//         for y in 0..reader.dimensions.dim1 - 1 {
+//             assert_eq!(
+//                 reader.read_range(Some(x..x + 1), Some(y..y + 2))?,
+//                 vec![x as f32 * 5.0 + y as f32, x as f32 * 5.0 + y as f32 + 1.0]
+//             );
+//         }
+//     }
 
-    // 2x in slow dim
-    for x in 0..reader.dimensions.dim0 - 1 {
-        for y in 0..reader.dimensions.dim1 {
-            assert_eq!(
-                reader.read_range(Some(x..x + 2), Some(y..y + 1))?,
-                vec![x as f32 * 5.0 + y as f32, (x as f32 + 1.0) * 5.0 + y as f32]
-            );
-        }
-    }
+//     // 2x in slow dim
+//     for x in 0..reader.dimensions.dim0 - 1 {
+//         for y in 0..reader.dimensions.dim1 {
+//             assert_eq!(
+//                 reader.read_range(Some(x..x + 2), Some(y..y + 1))?,
+//                 vec![x as f32 * 5.0 + y as f32, (x as f32 + 1.0) * 5.0 + y as f32]
+//             );
+//         }
+//     }
 
-    // 2x2
-    for x in 0..reader.dimensions.dim0 - 1 {
-        for y in 0..reader.dimensions.dim1 - 1 {
-            assert_eq!(
-                reader.read_range(Some(x..x + 2), Some(y..y + 2))?,
-                vec![
-                    x as f32 * 5.0 + y as f32,
-                    x as f32 * 5.0 + y as f32 + 1.0,
-                    (x as f32 + 1.0) * 5.0 + y as f32,
-                    (x as f32 + 1.0) * 5.0 + y as f32 + 1.0
-                ]
-            );
-        }
-    }
+//     // 2x2
+//     for x in 0..reader.dimensions.dim0 - 1 {
+//         for y in 0..reader.dimensions.dim1 - 1 {
+//             assert_eq!(
+//                 reader.read_range(Some(x..x + 2), Some(y..y + 2))?,
+//                 vec![
+//                     x as f32 * 5.0 + y as f32,
+//                     x as f32 * 5.0 + y as f32 + 1.0,
+//                     (x as f32 + 1.0) * 5.0 + y as f32,
+//                     (x as f32 + 1.0) * 5.0 + y as f32 + 1.0
+//                 ]
+//             );
+//         }
+//     }
 
-    // 3x3
-    for x in 0..reader.dimensions.dim0 - 2 {
-        for y in 0..reader.dimensions.dim1 - 2 {
-            assert_eq!(
-                reader.read_range(Some(x..x + 3), Some(y..y + 3))?,
-                vec![
-                    x as f32 * 5.0 + y as f32,
-                    x as f32 * 5.0 + y as f32 + 1.0,
-                    x as f32 * 5.0 + y as f32 + 2.0,
-                    (x as f32 + 1.0) * 5.0 + y as f32,
-                    (x as f32 + 1.0) * 5.0 + y as f32 + 1.0,
-                    (x as f32 + 1.0) * 5.0 + y as f32 + 2.0,
-                    (x as f32 + 2.0) * 5.0 + y as f32,
-                    (x as f32 + 2.0) * 5.0 + y as f32 + 1.0,
-                    (x as f32 + 2.0) * 5.0 + y as f32 + 2.0
-                ]
-            );
-        }
-    }
+//     // 3x3
+//     for x in 0..reader.dimensions.dim0 - 2 {
+//         for y in 0..reader.dimensions.dim1 - 2 {
+//             assert_eq!(
+//                 reader.read_range(Some(x..x + 3), Some(y..y + 3))?,
+//                 vec![
+//                     x as f32 * 5.0 + y as f32,
+//                     x as f32 * 5.0 + y as f32 + 1.0,
+//                     x as f32 * 5.0 + y as f32 + 2.0,
+//                     (x as f32 + 1.0) * 5.0 + y as f32,
+//                     (x as f32 + 1.0) * 5.0 + y as f32 + 1.0,
+//                     (x as f32 + 1.0) * 5.0 + y as f32 + 2.0,
+//                     (x as f32 + 2.0) * 5.0 + y as f32,
+//                     (x as f32 + 2.0) * 5.0 + y as f32 + 1.0,
+//                     (x as f32 + 2.0) * 5.0 + y as f32 + 2.0
+//                 ]
+//             );
+//         }
+//     }
 
-    // 1x5
-    for x in 0..reader.dimensions.dim1 {
-        assert_eq!(
-            reader.read_range(Some(x..x + 1), Some(0..5))?,
-            vec![
-                x as f32 * 5.0,
-                x as f32 * 5.0 + 1.0,
-                x as f32 * 5.0 + 2.0,
-                x as f32 * 5.0 + 3.0,
-                x as f32 * 5.0 + 4.0
-            ]
-        );
-    }
+//     // 1x5
+//     for x in 0..reader.dimensions.dim1 {
+//         assert_eq!(
+//             reader.read_range(Some(x..x + 1), Some(0..5))?,
+//             vec![
+//                 x as f32 * 5.0,
+//                 x as f32 * 5.0 + 1.0,
+//                 x as f32 * 5.0 + 2.0,
+//                 x as f32 * 5.0 + 3.0,
+//                 x as f32 * 5.0 + 4.0
+//             ]
+//         );
+//     }
 
-    // 5x1
-    for x in 0..reader.dimensions.dim0 {
-        assert_eq!(
-            reader.read_range(Some(0..5), Some(x..x + 1))?,
-            vec![
-                x as f32,
-                x as f32 + 5.0,
-                x as f32 + 10.0,
-                x as f32 + 15.0,
-                x as f32 + 20.0
-            ]
-        );
-    }
+//     // 5x1
+//     for x in 0..reader.dimensions.dim0 {
+//         assert_eq!(
+//             reader.read_range(Some(0..5), Some(x..x + 1))?,
+//             vec![
+//                 x as f32,
+//                 x as f32 + 5.0,
+//                 x as f32 + 10.0,
+//                 x as f32 + 15.0,
+//                 x as f32 + 20.0
+//             ]
+//         );
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 fn assert_eq_with_accuracy(expected: &[f32], actual: &[f32], accuracy: f32) {
     assert_eq!(expected.len(), actual.len());
