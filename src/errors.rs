@@ -10,6 +10,11 @@ pub enum OmFilesRsError {
         error: String,
     },
     ChunkHasWrongNumberOfElements,
+    OffsetAndCountExceedDimension {
+        offset: u64,
+        count: u64,
+        dimension: u64,
+    },
     DimensionOutOfBounds {
         range: std::ops::Range<usize>,
         allowed: usize,
@@ -45,6 +50,17 @@ impl std::fmt::Display for OmFilesRsError {
             }
             OmFilesRsError::ChunkHasWrongNumberOfElements => {
                 write!(f, "Chunk has wrong number of elements")
+            }
+            OmFilesRsError::OffsetAndCountExceedDimension {
+                offset,
+                count,
+                dimension,
+            } => {
+                write!(
+                    f,
+                    "Offset and count exceed dimension: offset {}, count {}, dimension {}",
+                    offset, count, dimension
+                )
             }
             OmFilesRsError::DimensionOutOfBounds { range, allowed } => {
                 write!(

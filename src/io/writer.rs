@@ -269,11 +269,21 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         let array_count = array_count.unwrap_or(array_dimensions);
 
         let array_size: u64 = array_dimensions.iter().product::<u64>();
-        debug_assert_eq!(array.len() as u64, array_size);
-        debug_assert!(array_dimensions
+        if array.len() as u64 != array_size {
+            return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
+        }
+        for (dim, (offset, count)) in array_dimensions
             .iter()
             .zip(array_offset.iter().zip(array_count.iter()))
-            .all(|(dim, (offset, count))| offset + count <= *dim));
+        {
+            if offset + count > *dim {
+                return Err(OmFilesRsError::OffsetAndCountExceedDimension {
+                    offset: *offset,
+                    count: *count,
+                    dimension: *dim,
+                });
+            }
+        }
 
         self.buffer
             .reallocate(self.compressed_chunk_buffer_size as usize * 4)?;
