@@ -1,8 +1,5 @@
-use omfiles_rs::{
-    backend::mmapfile::{MmapFile, Mode},
-    io::reader::OmFileReader,
-};
-use std::{env, fs::File, io, ops::Range, sync::Arc};
+use omfiles_rs::io::reader::OmFileReader;
+use std::{env, io, ops::Range};
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -20,15 +17,7 @@ fn main() -> io::Result<()> {
     let ranges: Vec<Option<Range<u64>>> = args[2..].iter().map(|s| parse_range(s)).collect();
 
     // Open the file and create the reader with the new structure
-    let file = File::open(file_path)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to open file: {}", e)))?;
-    let backend = MmapFile::new(file, Mode::ReadOnly).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("Failed to create backend: {}", e),
-        )
-    })?;
-    let reader = OmFileReader::new(Arc::new(backend)).map_err(|e| {
+    let reader = OmFileReader::from_file(file_path).map_err(|e| {
         io::Error::new(
             io::ErrorKind::Other,
             format!("Failed to create reader: {}", e),
