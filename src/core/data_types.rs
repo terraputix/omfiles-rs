@@ -1,4 +1,4 @@
-use omfileformatc_rs::OmDataType_t;
+use om_file_format_sys::OmDataType_t;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

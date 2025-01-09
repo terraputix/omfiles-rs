@@ -2,7 +2,7 @@ use crate::backend::mmapfile::{MAdvice, MmapFile, MmapType};
 use crate::core::c_defaults::{c_error_string, new_data_read, new_index_read};
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
-use omfileformatc_rs::{
+use om_file_format_sys::{
     om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
     OmError_t_ERROR_OK,
 };

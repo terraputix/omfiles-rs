@@ -29,7 +29,7 @@ path = "src/bin/reformat.rs"
 memmap2 = "0.9.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-omfileformatc-rs = { git = "https://github.com/terraputix/omfileformatc-rs", branch = "main" }
+om-file-format-sys = { version = "1.0.1" }
 
 [dev-dependencies]
 criterion = "0.5.1"

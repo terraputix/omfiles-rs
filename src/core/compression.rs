@@ -1,4 +1,4 @@
-use omfileformatc_rs::OmCompression_t;
+use om_file_format_sys::OmCompression_t;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::OmFilesRsError;

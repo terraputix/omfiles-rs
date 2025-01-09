@@ -4,7 +4,7 @@ use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
 use crate::io::buffered_writer::OmBufferedWriter;
-use omfileformatc_rs::{
+use om_file_format_sys::{
     om_encoder_chunk_buffer_size, om_encoder_compress_chunk, om_encoder_compress_lut,
     om_encoder_compressed_chunk_buffer_size, om_encoder_count_chunks,
     om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, om_header_write,

@@ -1,4 +1,4 @@
-use omfileformatc_rs::{fpxdec32, fpxenc32};
+use om_file_format_sys::{fpxdec32, fpxenc32};
 use omfiles_rs::{
     backend::{
         backends::{InMemoryBackend, OmFileReaderBackend},

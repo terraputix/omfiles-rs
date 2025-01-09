@@ -1,4 +1,4 @@
-use omfileformatc_rs::{
+use om_file_format_sys::{
     om_decoder_init_data_read, om_decoder_init_index_read, om_error_string, OmDecoder_dataRead_t,
     OmDecoder_indexRead_t, OmDecoder_t, OmEncoder_t, OmError_t, OmRange_t,
 };

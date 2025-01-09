@@ -4,7 +4,7 @@ use crate::core::c_defaults::{c_error_string, create_decoder};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
-use omfileformatc_rs::{
+use om_file_format_sys::{
     om_decoder_init, om_decoder_read_buffer_size, om_header_size, om_header_type, om_trailer_read,
     om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
     om_variable_get_children_count, om_variable_get_chunks, om_variable_get_compression,
