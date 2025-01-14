@@ -1,6 +1,6 @@
 use crate::backend::backends::OmFileReaderBackend;
 use crate::backend::mmapfile::{MmapFile, Mode};
-use crate::core::c_defaults::{c_error_string, create_decoder};
+use crate::core::c_defaults::{c_error_string, create_uninit_decoder};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
@@ -214,7 +214,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
 
         // Initialize decoder
-        let mut decoder = create_decoder();
+        let mut decoder = unsafe { create_uninit_decoder() };
         let error = unsafe {
             om_decoder_init(
                 &mut decoder,

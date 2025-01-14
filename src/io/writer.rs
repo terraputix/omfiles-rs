@@ -1,5 +1,5 @@
 use crate::backend::backends::OmFileWriterBackend;
-use crate::core::c_defaults::create_encoder;
+use crate::core::c_defaults::create_uninit_encoder;
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
@@ -216,7 +216,7 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
 
         let chunks = chunk_dimensions;
 
-        let mut encoder = create_encoder();
+        let mut encoder = unsafe { create_uninit_encoder() };
         let error = unsafe {
             om_encoder_init(
                 &mut encoder,
