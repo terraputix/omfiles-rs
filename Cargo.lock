@@ -416,9 +416,8 @@ dependencies = [
 
 [[package]]
 name = "om-file-format-sys"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ebb0f1c6d2b950f4b6224acbd11088b2db36e55a7d1c59a508bb34dd3a9210"
+version = "0.0.0"
+source = "git+https://github.com/open-meteo/om-file-format?branch=fix-small-type-mismatch#d12e6dab0da04532ea56f5de8238faed911200f4"
 dependencies = [
  "bindgen",
  "cc",
