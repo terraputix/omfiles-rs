@@ -11,7 +11,7 @@ pub mod io {
 pub mod core {
     pub mod c_defaults;
     pub mod compression;
-    pub(crate) mod data_types;
+    pub mod data_types;
     pub mod dimensions;
     pub mod header;
 }
