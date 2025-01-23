@@ -318,114 +318,119 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// #[test]
-// fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
-//     let file = "test_offset_write.om";
-//     remove_file_if_exists(file);
+#[test]
+fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
+    let file = "test_offset_write.om";
+    remove_file_if_exists(file);
 
-//     // Set up the writer with the specified dimensions and chunk dimensions
-//     let dims = vec![5, 5];
-//     let chunk_dimensions = vec![2, 2];
-//     let compression = CompressionType::PforDelta2dInt16;
-//     let scale_factor = 1.0;
-//     let add_offset = 0.0;
+    // Set up the writer with the specified dimensions and chunk dimensions
+    let dims = vec![5, 5];
+    let chunk_dimensions = vec![2, 2];
+    let compression = CompressionType::PforDelta2dInt16;
+    let scale_factor = 1.0;
+    let add_offset = 0.0;
 
-//     // Deliberately add NaN on all positions that should not be written to the file.
-//     // Only the inner 5x5 array is written.
-//     let data = vec![
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         0.0,
-//         1.0,
-//         2.0,
-//         3.0,
-//         4.0,
-//         f32::NAN,
-//         f32::NAN,
-//         5.0,
-//         6.0,
-//         7.0,
-//         8.0,
-//         9.0,
-//         f32::NAN,
-//         f32::NAN,
-//         10.0,
-//         11.0,
-//         12.0,
-//         13.0,
-//         14.0,
-//         f32::NAN,
-//         f32::NAN,
-//         15.0,
-//         16.0,
-//         17.0,
-//         18.0,
-//         19.0,
-//         f32::NAN,
-//         f32::NAN,
-//         20.0,
-//         21.0,
-//         22.0,
-//         23.0,
-//         24.0,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//         f32::NAN,
-//     ];
+    // Deliberately add NaN on all positions that should not be written to the file.
+    // Only the inner 5x5 array is written.
+    let data = vec![
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        f32::NAN,
+        f32::NAN,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        f32::NAN,
+        f32::NAN,
+        10.0,
+        11.0,
+        12.0,
+        13.0,
+        14.0,
+        f32::NAN,
+        f32::NAN,
+        15.0,
+        16.0,
+        17.0,
+        18.0,
+        19.0,
+        f32::NAN,
+        f32::NAN,
+        20.0,
+        21.0,
+        22.0,
+        23.0,
+        24.0,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+        f32::NAN,
+    ];
 
-//     {
-//         let file_handle = File::create(file)?;
-//         let mut file_writer = OmFileWriter::new(&file_handle, 8);
-//         let mut writer = file_writer
-//             .prepare_array::<f32>(
-//                 dims.clone(),
-//                 chunk_dimensions,
-//                 compression,
-//                 scale_factor,
-//                 add_offset,
-//             )
-//             .expect("Could not prepare writer");
+    {
+        let file_handle = File::create(file)?;
+        let mut file_writer = OmFileWriter::new(&file_handle, 8);
+        let mut writer = file_writer
+            .prepare_array::<f32>(
+                dims.clone(),
+                chunk_dimensions,
+                compression,
+                scale_factor,
+                add_offset,
+            )
+            .expect("Could not prepare writer");
 
-//         // Write data with array dimensions [7,7] and reading from [1..6, 1..6]
-//         writer.write_data(&data, Some(&[7, 7]), Some(&[1, 1]), Some(&[5, 5]))?;
+        // Write data with array dimensions [7,7] and reading from [1..6, 1..6]
+        let data = ArrayD::from_shape_vec(vec![7, 7], data).unwrap();
+        writer.write_data(&data, Some(&[1, 1]), Some(&[5, 5]))?;
 
-//         let variable_meta = writer.finalize();
-//         let variable = file_writer.write_array(variable_meta, "data", &[])?;
-//         file_writer.write_trailer(variable)?;
-//     }
+        let variable_meta = writer.finalize();
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
+        file_writer.write_trailer(variable)?;
+    }
 
-//     {
-//         // Read the file
-//         let file_for_reading = File::open(file)?;
-//         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-//         let read = OmFileReader::new(Arc::new(read_backend))?;
+    {
+        // Read the file
+        let file_for_reading = File::open(file)?;
+        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+        let read = OmFileReader::new(Arc::new(read_backend))?;
 
-//         // Read the data
-//         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
+        // Read the data
+        let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
 
-//         // Expected data
-//         let expected = vec![
-//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-//         ];
+        // Expected data
+        let expected = ArrayD::from_shape_vec(
+            vec![5, 5],
+            vec![
+                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+            ],
+        )
+        .unwrap();
 
-//         assert_eq!(a, expected);
-//     }
+        assert_eq_with_accuracy_nd(&a, &expected, 0.001);
+    }
 
-//     remove_file_if_exists(file);
-//     Ok(())
-// }
+    remove_file_if_exists(file);
+    Ok(())
+}
 
 // #[test]
 // fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {

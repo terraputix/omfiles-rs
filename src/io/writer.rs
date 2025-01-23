@@ -280,17 +280,18 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         array_count: Option<&[u64]>,
     ) -> Result<(), OmFilesRsError> {
         let array_dimensions = array_dimensions.unwrap_or(&self.dimensions);
-        if array_dimensions.len() != self.dimensions.len() {
+        let default_offset = vec![0; array_dimensions.len()];
+        let array_offset = array_offset.unwrap_or(default_offset.as_slice());
+        let array_count = array_count.unwrap_or(array_dimensions);
+
+        if array_count.len() != self.dimensions.len() {
             return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
         }
-        for (array_dim, max_dim) in array_dimensions.iter().zip(self.dimensions.iter()) {
+        for (array_dim, max_dim) in array_count.iter().zip(self.dimensions.iter()) {
             if array_dim > max_dim {
                 return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
             }
         }
-        let default_offset = vec![0; array_dimensions.len()];
-        let array_offset = array_offset.unwrap_or(default_offset.as_slice());
-        let array_count = array_count.unwrap_or(array_dimensions);
 
         let array_size: u64 = array_dimensions.iter().product::<u64>();
         if array.len() as u64 != array_size {
