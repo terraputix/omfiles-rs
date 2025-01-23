@@ -1,11 +1,11 @@
-use om_file_format_sys::OmCompression_t;
-
 use crate::errors::OmFilesRsError;
+use om_file_format_sys::OmCompression_t;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum CompressionType {
-    /// Lossy compression using 2D delta coding and scale-factor. Only supports float and scales to 16-bit signed integer.
+    /// Lossy compression using 2D delta coding and scale-factor.
+    /// Only supports float and scales to 16-bit signed integer.
     PforDelta2dInt16 = 0,
     /// Lossless float/double compression using 2D xor coding.
     FpxXor2d = 1,
