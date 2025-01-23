@@ -208,675 +208,675 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[test]
-fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "test_write_chunks.om";
-    remove_file_if_exists(file);
-
-    // Set up the writer with the specified dimensions and chunk dimensions
-    let dims = vec![5, 5];
-    let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::PforDelta2dInt16;
-    let scale_factor = 1.0;
-    let add_offset = 0.0;
-
-    {
-        let file_handle = File::create(file)?;
-        let mut file_writer = OmFileWriter::new(&file_handle, 8);
-        let mut writer = file_writer
-            .prepare_array::<f32>(
-                dims.clone(),
-                chunk_dimensions,
-                compression,
-                scale_factor,
-                add_offset,
-            )
-            .expect("Could not prepare writer");
-
-        // Directly feed individual chunks
-        writer.write_data(&[0.0, 1.0, 5.0, 6.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[2.0, 3.0, 7.0, 8.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[4.0, 9.0], Some(&[2, 1]), None, None)?;
-        writer.write_data(&[10.0, 11.0, 15.0, 16.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[12.0, 13.0, 17.0, 18.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[14.0, 19.0], Some(&[2, 1]), None, None)?;
-        writer.write_data(&[20.0, 21.0], Some(&[1, 2]), None, None)?;
-        writer.write_data(&[22.0, 23.0], Some(&[1, 2]), None, None)?;
-        writer.write_data(&[24.0], Some(&[1, 1]), None, None)?;
-
-        let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(variable_meta, "data", &[])?;
-        file_writer.write_trailer(variable)?;
-    }
-
-    {
-        // test reading
-        let file_for_reading = File::open(file)?;
-        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-
-        let backend = Arc::new(read_backend);
-
-        let read = OmFileReader::new(backend.clone())?;
-
-        let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
-        assert_eq!(a, expected);
-    }
-
-    // let count = backend.count() as u64;
-    // let bytes = backend.get_bytes(0, count)?;
-
-    // // difference on x86 and ARM cause by the underlying compression
-    // assert_eq!(
-    //     bytes,
-    // &[
-    //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
-    //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
-    //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
-    //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
-    //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
-    //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    // ]
-    // );
-    // assert_eq!(
-    //     bytes,
-    //     &[
-    //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
-    //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
-    //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
-    //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
-    //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    //     ]
-    // );
-
-    remove_file_if_exists(file);
-    Ok(())
-}
-
-#[test]
-fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "test_offset_write.om";
-    remove_file_if_exists(file);
-
-    // Set up the writer with the specified dimensions and chunk dimensions
-    let dims = vec![5, 5];
-    let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::PforDelta2dInt16;
-    let scale_factor = 1.0;
-    let add_offset = 0.0;
-
-    // Deliberately add NaN on all positions that should not be written to the file.
-    // Only the inner 5x5 array is written.
-    let data = vec![
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        0.0,
-        1.0,
-        2.0,
-        3.0,
-        4.0,
-        f32::NAN,
-        f32::NAN,
-        5.0,
-        6.0,
-        7.0,
-        8.0,
-        9.0,
-        f32::NAN,
-        f32::NAN,
-        10.0,
-        11.0,
-        12.0,
-        13.0,
-        14.0,
-        f32::NAN,
-        f32::NAN,
-        15.0,
-        16.0,
-        17.0,
-        18.0,
-        19.0,
-        f32::NAN,
-        f32::NAN,
-        20.0,
-        21.0,
-        22.0,
-        23.0,
-        24.0,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-        f32::NAN,
-    ];
-
-    {
-        let file_handle = File::create(file)?;
-        let mut file_writer = OmFileWriter::new(&file_handle, 8);
-        let mut writer = file_writer
-            .prepare_array::<f32>(
-                dims.clone(),
-                chunk_dimensions,
-                compression,
-                scale_factor,
-                add_offset,
-            )
-            .expect("Could not prepare writer");
-
-        // Write data with array dimensions [7,7] and reading from [1..6, 1..6]
-        writer.write_data(&data, Some(&[7, 7]), Some(&[1, 1]), Some(&[5, 5]))?;
-
-        let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(variable_meta, "data", &[])?;
-        file_writer.write_trailer(variable)?;
-    }
-
-    {
-        // Read the file
-        let file_for_reading = File::open(file)?;
-        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-        let read = OmFileReader::new(Arc::new(read_backend))?;
-
-        // Read the data
-        let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
-
-        // Expected data
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
-
-        assert_eq!(a, expected);
-    }
-
-    remove_file_if_exists(file);
-    Ok(())
-}
-
-#[test]
-fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "test_write_3d.om";
-    remove_file_if_exists(file);
-
-    let dims = vec![3, 3, 3];
-    let chunk_dimensions = vec![2, 2, 2];
-    let compression = CompressionType::PforDelta2dInt16;
-    let scale_factor = 1.0;
-    let add_offset = 0.0;
-
-    let data: Vec<f32> = vec![
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-        17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0,
-    ];
-
-    {
-        let file_handle = File::create(file)?;
-        let mut file_writer = OmFileWriter::new(&file_handle, 8);
-        let mut writer = file_writer
-            .prepare_array::<f32>(
-                dims.clone(),
-                chunk_dimensions,
-                compression,
-                scale_factor,
-                add_offset,
-            )
-            .expect("Could not prepare writer");
-
-        writer.write_data(&data, None, None, None)?;
-
-        let variable_meta = writer.finalize();
-        let int32_attribute = file_writer.write_scalar(12323154i32, "int32", &[])?;
-        let double_attribute = file_writer.write_scalar(12323154f64, "double", &[])?;
-        let variable =
-            file_writer.write_array(variable_meta, "data", &[int32_attribute, double_attribute])?;
-        file_writer.write_trailer(variable)?;
-    }
-
-    {
-        // Read the file
-        let file_for_reading = File::open(file)?;
-        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-        let backend = Arc::new(read_backend);
-        let read = OmFileReader::new(backend.clone())?;
-
-        assert_eq!(read.number_of_children(), 2);
-
-        let child = read.get_child(0).unwrap();
-        assert_eq!(child.read_scalar::<i32>().unwrap(), 12323154i32);
-        assert_eq!(child.get_name().unwrap(), "int32");
-
-        let child2 = read.get_child(1).unwrap();
-        assert_eq!(child2.read_scalar::<f64>().unwrap(), 12323154f64);
-        assert_eq!(child2.get_name().unwrap(), "double");
-
-        assert!(read.get_child(2).is_none());
-
-        let a = read.read::<f32>(&[0..3, 0..3, 0..3], None, None)?;
-        assert_eq!(a, data);
-
-        // Single index checks
-        for x in 0..dims[0] {
-            for y in 0..dims[1] {
-                for z in 0..dims[2] {
-                    let value = read.read::<f32>(&[x..x + 1, y..y + 1, z..z + 1], None, None)?;
-                    assert_eq!(value, vec![(x * 9 + y * 3 + z) as f32]);
-                }
-            }
-        }
-
-        let count = backend.count();
-        assert_eq!(count, 240);
-        let bytes = backend.get_bytes(0, count as u64)?;
-        assert_eq!(&bytes[0..3], &[79, 77, 3]);
-        assert_eq!(&bytes[3..8], &[0, 3, 34, 140, 2]);
-        // difference on x86 and ARM cause by the underlying compression
-        assert!(&bytes[8..12] == &[2, 3, 114, 1] || &bytes[8..12] == &[2, 3, 114, 141]);
-        assert!(&bytes[12..16] == &[6, 3, 34, 0] || &bytes[12..16] == &[6, 3, 34, 140]);
-
-        assert_eq!(&bytes[16..19], &[8, 194, 2]);
-        assert_eq!(&bytes[19..23], &[18, 5, 226, 3]);
-        assert_eq!(&bytes[23..26], &[20, 198, 33]);
-        assert_eq!(&bytes[26..29], &[24, 194, 2]);
-        assert_eq!(&bytes[29..30], &[26]);
-        assert_eq!(&bytes[30..35], &[3, 3, 37, 199, 45]);
-        assert_eq!(&bytes[35..40], &[0, 0, 0, 0, 0]);
-        assert_eq!(
-            &bytes[40..57],
-            &[5, 4, 5, 0, 0, 0, 0, 0, 82, 9, 188, 0, 105, 110, 116, 51, 50]
-        );
-        assert_eq!(
-            &bytes[65..87],
-            &[4, 6, 0, 0, 0, 0, 0, 0, 0, 0, 64, 42, 129, 103, 65, 100, 111, 117, 98, 108, 101, 0]
-        );
-        assert_eq!(
-            &bytes[88..212],
-            &[
-                20, 0, 4, 0, 2, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 0,
-                0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0,
-                3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0,
-                0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97
-            ]
-        );
-        assert_eq!(
-            &bytes[216..240],
-            &[79, 77, 3, 0, 0, 0, 0, 0, 88, 0, 0, 0, 0, 0, 0, 0, 124, 0, 0, 0, 0, 0, 0, 0]
-        );
-    }
-
-    remove_file_if_exists(file);
-    Ok(())
-}
-
-#[test]
-fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "test_write_v3.om";
-    remove_file_if_exists(file);
-
-    let dims = vec![5, 5];
-    let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::PforDelta2dInt16;
-    let scale_factor = 1.0;
-    let add_offset = 0.0;
-
-    {
-        let file_handle = File::create(file)?;
-        let mut file_writer = OmFileWriter::new(&file_handle, 8);
-        let mut writer = file_writer
-            .prepare_array::<f32>(
-                dims.clone(),
-                chunk_dimensions,
-                compression,
-                scale_factor,
-                add_offset,
-            )
-            .expect("Could not prepare writer");
-
-        let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-        writer.write_data(&data, None, None, None)?;
-
-        let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(variable_meta, "data", &[])?;
-        file_writer.write_trailer(variable)?;
-    }
-
-    {
-        // Open file for reading
-        let file_for_reading = File::open(file)?;
-        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-        let backend = Arc::new(read_backend);
-        let read = OmFileReader::new(backend.clone())?;
-
-        // Rest of test remains the same but using read.read::<f32>() instead of read_var.read()
-        let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
-        assert_eq!(a, expected);
-
-        // Single index checks
-        for x in 0..5 {
-            for y in 0..5 {
-                let value = read.read::<f32>(&[x..x + 1, y..y + 1], None, None)?;
-                assert_eq!(value, vec![(x * 5 + y) as f32]);
-            }
-        }
-
-        // Read into existing array with offset
-        for x in 0..5 {
-            for y in 0..5 {
-                let mut r = vec![f32::NAN; 9];
-                read.read_into(
-                    &mut r,
-                    &[x..x + 1, y..y + 1],
-                    &[1, 1],
-                    &[3, 3],
-                    Some(0),
-                    Some(0),
-                )?;
-                let expected = vec![
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    (x * 5 + y) as f32,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                ];
-                assert_eq_with_nan(&r, &expected, 0.001);
-            }
-        }
-
-        // Rest of checks with read.read::<f32>()
-        // 2x in fast dimension
-        for x in 0..5 {
-            for y in 0..4 {
-                let value = read.read::<f32>(&[x..x + 1, y..y + 2], None, None)?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
-            }
-        }
-
-        // 2x in slow dimension
-        for x in 0..4 {
-            for y in 0..5 {
-                let value = read.read::<f32>(&[x..x + 2, y..y + 1], None, None)?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
-            }
-        }
-
-        // 2x2 regions
-        for x in 0..4 {
-            for y in 0..4 {
-                let value = read.read::<f32>(&[x..x + 2, y..y + 2], None, None)?;
-                assert_eq!(
-                    value,
-                    vec![
-                        (x * 5 + y) as f32,
-                        (x * 5 + y + 1) as f32,
-                        ((x + 1) * 5 + y) as f32,
-                        ((x + 1) * 5 + y + 1) as f32,
-                    ]
-                );
-            }
-        }
-
-        // 3x3 regions
-        for x in 0..3 {
-            for y in 0..3 {
-                let value = read.read::<f32>(&[x..x + 3, y..y + 3], None, None)?;
-                assert_eq!(
-                    value,
-                    vec![
-                        (x * 5 + y) as f32,
-                        (x * 5 + y + 1) as f32,
-                        (x * 5 + y + 2) as f32,
-                        ((x + 1) * 5 + y) as f32,
-                        ((x + 1) * 5 + y + 1) as f32,
-                        ((x + 1) * 5 + y + 2) as f32,
-                        ((x + 2) * 5 + y) as f32,
-                        ((x + 2) * 5 + y + 1) as f32,
-                        ((x + 2) * 5 + y + 2) as f32,
-                    ]
-                );
-            }
-        }
-
-        // 1x5 regions
-        for x in 0..5 {
-            let value = read.read::<f32>(&[x..x + 1, 0..5], None, None)?;
-            assert_eq!(
-                value,
-                vec![
-                    (x * 5) as f32,
-                    (x * 5 + 1) as f32,
-                    (x * 5 + 2) as f32,
-                    (x * 5 + 3) as f32,
-                    (x * 5 + 4) as f32,
-                ]
-            );
-        }
-
-        // 5x1 regions
-        for x in 0..5 {
-            let value = read.read::<f32>(&[0..5, x..x + 1], None, None)?;
-            assert_eq!(
-                value,
-                vec![
-                    x as f32,
-                    (x + 5) as f32,
-                    (x + 10) as f32,
-                    (x + 15) as f32,
-                    (x + 20) as f32,
-                ]
-            );
-        }
-
-        let count = backend.count();
-        let bytes = backend.get_bytes(0, count as u64)?;
-        assert_eq!(
-            &bytes,
-            &[
-                79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14,
-                197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0,
-                0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
-                0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0,
-                0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-            ]
-        );
-    }
-
-    remove_file_if_exists(file);
-    Ok(())
-}
-
-#[test]
-fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
-    let file = "test_write_v3_max_io_limit.om";
-    remove_file_if_exists(file);
-
-    // Define dimensions and writer parameters
-    let dims = vec![5, 5];
-    let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::PforDelta2dInt16;
-    let scale_factor = 1.0;
-    let add_offset = 0.0;
-
-    {
-        let file_handle = File::create(file)?;
-        let mut file_writer = OmFileWriter::new(&file_handle, 8);
-        let mut writer = file_writer
-            .prepare_array::<f32>(
-                dims.clone(),
-                chunk_dimensions,
-                compression,
-                scale_factor,
-                add_offset,
-            )
-            .expect("Could not prepare writer");
-
-        // Define the data to write
-        let data: Vec<f32> = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
-
-        writer.write_data(&data, None, None, None)?;
-
-        let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(variable_meta, "data", &[])?;
-        file_writer.write_trailer(variable)?;
-    }
-
-    {
-        // Open the file for reading
-        let file_for_reading = File::open(file)?;
-        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-        // Initialize the reader using the open_file method
-        let read = OmFileReader::new(Arc::new(read_backend))?;
-
-        // Read with io_size_max: 0, io_size_merge: 0
-        let a = read.read::<f32>(&[0..5, 0..5], Some(0), Some(0))?;
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
-        assert_eq!(a, expected);
-
-        // Single index checks
-        for x in 0..dims[0] {
-            for y in 0..dims[1] {
-                let value = read.read::<f32>(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
-                assert_eq!(value, vec![(x * 5 + y) as f32]);
-            }
-        }
-
-        // Read into an existing array with an offset
-        for x in 0..dims[0] {
-            for y in 0..dims[1] {
-                let mut r = vec![f32::NAN; 9];
-                read.read_into(
-                    &mut r,
-                    &[x..x + 1, y..y + 1],
-                    &[1, 1],
-                    &[3, 3],
-                    Some(0),
-                    Some(0),
-                )?;
-                let expected = vec![
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    (x * 5 + y) as f32,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                ];
-                assert_eq_with_nan(&r, &expected, 0.001);
-            }
-        }
-
-        // 2x in fast dimension
-        for x in 0..dims[0] {
-            for y in 0..dims[1] - 1 {
-                let value = read.read::<f32>(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
-            }
-        }
-
-        // 2x in slow dimension
-        for x in 0..dims[0] - 1 {
-            for y in 0..dims[1] {
-                let value = read.read::<f32>(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
-            }
-        }
-
-        // 2x2
-        for x in 0..dims[0] - 1 {
-            for y in 0..dims[1] - 1 {
-                let value = read.read::<f32>(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
-                assert_eq!(
-                    value,
-                    vec![
-                        (x * 5 + y) as f32,
-                        (x * 5 + y + 1) as f32,
-                        ((x + 1) * 5 + y) as f32,
-                        ((x + 1) * 5 + y + 1) as f32,
-                    ]
-                );
-            }
-        }
-
-        // 3x3
-        for x in 0..dims[0] - 2 {
-            for y in 0..dims[1] - 2 {
-                let value = read.read::<f32>(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
-                assert_eq!(
-                    value,
-                    vec![
-                        (x * 5 + y) as f32,
-                        (x * 5 + y + 1) as f32,
-                        (x * 5 + y + 2) as f32,
-                        ((x + 1) * 5 + y) as f32,
-                        ((x + 1) * 5 + y + 1) as f32,
-                        ((x + 1) * 5 + y + 2) as f32,
-                        ((x + 2) * 5 + y) as f32,
-                        ((x + 2) * 5 + y + 1) as f32,
-                        ((x + 2) * 5 + y + 2) as f32,
-                    ]
-                );
-            }
-        }
-
-        // 1x5
-        for x in 0..dims[1] {
-            let value = read.read::<f32>(&[x..x + 1, 0..5], Some(0), Some(0))?;
-            let expected = vec![
-                (x * 5) as f32,
-                (x * 5 + 1) as f32,
-                (x * 5 + 2) as f32,
-                (x * 5 + 3) as f32,
-                (x * 5 + 4) as f32,
-            ];
-            assert_eq!(value, expected);
-        }
-
-        // 5x1
-        for x in 0..dims[0] {
-            let value = read.read::<f32>(&[0..5, x..x + 1], Some(0), Some(0))?;
-            let expected = vec![
-                x as f32,
-                (x + 5) as f32,
-                (x + 10) as f32,
-                (x + 15) as f32,
-                (x + 20) as f32,
-            ];
-            assert_eq!(value, expected);
-        }
-    }
-
-    remove_file_if_exists(file);
-    Ok(())
-}
+// #[test]
+// fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "test_write_chunks.om";
+//     remove_file_if_exists(file);
+
+//     // Set up the writer with the specified dimensions and chunk dimensions
+//     let dims = vec![5, 5];
+//     let chunk_dimensions = vec![2, 2];
+//     let compression = CompressionType::PforDelta2dInt16;
+//     let scale_factor = 1.0;
+//     let add_offset = 0.0;
+
+//     {
+//         let file_handle = File::create(file)?;
+//         let mut file_writer = OmFileWriter::new(&file_handle, 8);
+//         let mut writer = file_writer
+//             .prepare_array::<f32>(
+//                 dims.clone(),
+//                 chunk_dimensions,
+//                 compression,
+//                 scale_factor,
+//                 add_offset,
+//             )
+//             .expect("Could not prepare writer");
+
+//         // Directly feed individual chunks
+//         writer.write_data(&[0.0, 1.0, 5.0, 6.0], Some(&[2, 2]), None, None)?;
+//         writer.write_data(&[2.0, 3.0, 7.0, 8.0], Some(&[2, 2]), None, None)?;
+//         writer.write_data(&[4.0, 9.0], Some(&[2, 1]), None, None)?;
+//         writer.write_data(&[10.0, 11.0, 15.0, 16.0], Some(&[2, 2]), None, None)?;
+//         writer.write_data(&[12.0, 13.0, 17.0, 18.0], Some(&[2, 2]), None, None)?;
+//         writer.write_data(&[14.0, 19.0], Some(&[2, 1]), None, None)?;
+//         writer.write_data(&[20.0, 21.0], Some(&[1, 2]), None, None)?;
+//         writer.write_data(&[22.0, 23.0], Some(&[1, 2]), None, None)?;
+//         writer.write_data(&[24.0], Some(&[1, 1]), None, None)?;
+
+//         let variable_meta = writer.finalize();
+//         let variable = file_writer.write_array(variable_meta, "data", &[])?;
+//         file_writer.write_trailer(variable)?;
+//     }
+
+//     {
+//         // test reading
+//         let file_for_reading = File::open(file)?;
+//         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+
+//         let backend = Arc::new(read_backend);
+
+//         let read = OmFileReader::new(backend.clone())?;
+
+//         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
+//         let expected = vec![
+//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//         ];
+//         assert_eq!(a, expected);
+//     }
+
+//     // let count = backend.count() as u64;
+//     // let bytes = backend.get_bytes(0, count)?;
+
+//     // // difference on x86 and ARM cause by the underlying compression
+//     // assert_eq!(
+//     //     bytes,
+//     // &[
+//     //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
+//     //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
+//     //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
+//     //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
+//     //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
+//     //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+//     // ]
+//     // );
+//     // assert_eq!(
+//     //     bytes,
+//     //     &[
+//     //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
+//     //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
+//     //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+//     //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
+//     //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
+//     //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+//     //     ]
+//     // );
+
+//     remove_file_if_exists(file);
+//     Ok(())
+// }
+
+// #[test]
+// fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "test_offset_write.om";
+//     remove_file_if_exists(file);
+
+//     // Set up the writer with the specified dimensions and chunk dimensions
+//     let dims = vec![5, 5];
+//     let chunk_dimensions = vec![2, 2];
+//     let compression = CompressionType::PforDelta2dInt16;
+//     let scale_factor = 1.0;
+//     let add_offset = 0.0;
+
+//     // Deliberately add NaN on all positions that should not be written to the file.
+//     // Only the inner 5x5 array is written.
+//     let data = vec![
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         0.0,
+//         1.0,
+//         2.0,
+//         3.0,
+//         4.0,
+//         f32::NAN,
+//         f32::NAN,
+//         5.0,
+//         6.0,
+//         7.0,
+//         8.0,
+//         9.0,
+//         f32::NAN,
+//         f32::NAN,
+//         10.0,
+//         11.0,
+//         12.0,
+//         13.0,
+//         14.0,
+//         f32::NAN,
+//         f32::NAN,
+//         15.0,
+//         16.0,
+//         17.0,
+//         18.0,
+//         19.0,
+//         f32::NAN,
+//         f32::NAN,
+//         20.0,
+//         21.0,
+//         22.0,
+//         23.0,
+//         24.0,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//         f32::NAN,
+//     ];
+
+//     {
+//         let file_handle = File::create(file)?;
+//         let mut file_writer = OmFileWriter::new(&file_handle, 8);
+//         let mut writer = file_writer
+//             .prepare_array::<f32>(
+//                 dims.clone(),
+//                 chunk_dimensions,
+//                 compression,
+//                 scale_factor,
+//                 add_offset,
+//             )
+//             .expect("Could not prepare writer");
+
+//         // Write data with array dimensions [7,7] and reading from [1..6, 1..6]
+//         writer.write_data(&data, Some(&[7, 7]), Some(&[1, 1]), Some(&[5, 5]))?;
+
+//         let variable_meta = writer.finalize();
+//         let variable = file_writer.write_array(variable_meta, "data", &[])?;
+//         file_writer.write_trailer(variable)?;
+//     }
+
+//     {
+//         // Read the file
+//         let file_for_reading = File::open(file)?;
+//         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+//         let read = OmFileReader::new(Arc::new(read_backend))?;
+
+//         // Read the data
+//         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
+
+//         // Expected data
+//         let expected = vec![
+//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//         ];
+
+//         assert_eq!(a, expected);
+//     }
+
+//     remove_file_if_exists(file);
+//     Ok(())
+// }
+
+// #[test]
+// fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "test_write_3d.om";
+//     remove_file_if_exists(file);
+
+//     let dims = vec![3, 3, 3];
+//     let chunk_dimensions = vec![2, 2, 2];
+//     let compression = CompressionType::PforDelta2dInt16;
+//     let scale_factor = 1.0;
+//     let add_offset = 0.0;
+
+//     let data: Vec<f32> = vec![
+//         0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+//         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0,
+//     ];
+
+//     {
+//         let file_handle = File::create(file)?;
+//         let mut file_writer = OmFileWriter::new(&file_handle, 8);
+//         let mut writer = file_writer
+//             .prepare_array::<f32>(
+//                 dims.clone(),
+//                 chunk_dimensions,
+//                 compression,
+//                 scale_factor,
+//                 add_offset,
+//             )
+//             .expect("Could not prepare writer");
+
+//         writer.write_data(&data, None, None, None)?;
+
+//         let variable_meta = writer.finalize();
+//         let int32_attribute = file_writer.write_scalar(12323154i32, "int32", &[])?;
+//         let double_attribute = file_writer.write_scalar(12323154f64, "double", &[])?;
+//         let variable =
+//             file_writer.write_array(variable_meta, "data", &[int32_attribute, double_attribute])?;
+//         file_writer.write_trailer(variable)?;
+//     }
+
+//     {
+//         // Read the file
+//         let file_for_reading = File::open(file)?;
+//         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+//         let backend = Arc::new(read_backend);
+//         let read = OmFileReader::new(backend.clone())?;
+
+//         assert_eq!(read.number_of_children(), 2);
+
+//         let child = read.get_child(0).unwrap();
+//         assert_eq!(child.read_scalar::<i32>().unwrap(), 12323154i32);
+//         assert_eq!(child.get_name().unwrap(), "int32");
+
+//         let child2 = read.get_child(1).unwrap();
+//         assert_eq!(child2.read_scalar::<f64>().unwrap(), 12323154f64);
+//         assert_eq!(child2.get_name().unwrap(), "double");
+
+//         assert!(read.get_child(2).is_none());
+
+//         let a = read.read::<f32>(&[0..3, 0..3, 0..3], None, None)?;
+//         assert_eq!(a, data);
+
+//         // Single index checks
+//         for x in 0..dims[0] {
+//             for y in 0..dims[1] {
+//                 for z in 0..dims[2] {
+//                     let value = read.read::<f32>(&[x..x + 1, y..y + 1, z..z + 1], None, None)?;
+//                     assert_eq!(value, vec![(x * 9 + y * 3 + z) as f32]);
+//                 }
+//             }
+//         }
+
+//         let count = backend.count();
+//         assert_eq!(count, 240);
+//         let bytes = backend.get_bytes(0, count as u64)?;
+//         assert_eq!(&bytes[0..3], &[79, 77, 3]);
+//         assert_eq!(&bytes[3..8], &[0, 3, 34, 140, 2]);
+//         // difference on x86 and ARM cause by the underlying compression
+//         assert!(&bytes[8..12] == &[2, 3, 114, 1] || &bytes[8..12] == &[2, 3, 114, 141]);
+//         assert!(&bytes[12..16] == &[6, 3, 34, 0] || &bytes[12..16] == &[6, 3, 34, 140]);
+
+//         assert_eq!(&bytes[16..19], &[8, 194, 2]);
+//         assert_eq!(&bytes[19..23], &[18, 5, 226, 3]);
+//         assert_eq!(&bytes[23..26], &[20, 198, 33]);
+//         assert_eq!(&bytes[26..29], &[24, 194, 2]);
+//         assert_eq!(&bytes[29..30], &[26]);
+//         assert_eq!(&bytes[30..35], &[3, 3, 37, 199, 45]);
+//         assert_eq!(&bytes[35..40], &[0, 0, 0, 0, 0]);
+//         assert_eq!(
+//             &bytes[40..57],
+//             &[5, 4, 5, 0, 0, 0, 0, 0, 82, 9, 188, 0, 105, 110, 116, 51, 50]
+//         );
+//         assert_eq!(
+//             &bytes[65..87],
+//             &[4, 6, 0, 0, 0, 0, 0, 0, 0, 0, 64, 42, 129, 103, 65, 100, 111, 117, 98, 108, 101, 0]
+//         );
+//         assert_eq!(
+//             &bytes[88..212],
+//             &[
+//                 20, 0, 4, 0, 2, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0,
+//                 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0, 17, 0, 0, 0, 0, 0, 0, 0, 22, 0, 0, 0, 0,
+//                 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0,
+//                 3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0,
+//                 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97
+//             ]
+//         );
+//         assert_eq!(
+//             &bytes[216..240],
+//             &[79, 77, 3, 0, 0, 0, 0, 0, 88, 0, 0, 0, 0, 0, 0, 0, 124, 0, 0, 0, 0, 0, 0, 0]
+//         );
+//     }
+
+//     remove_file_if_exists(file);
+//     Ok(())
+// }
+
+// #[test]
+// fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "test_write_v3.om";
+//     remove_file_if_exists(file);
+
+//     let dims = vec![5, 5];
+//     let chunk_dimensions = vec![2, 2];
+//     let compression = CompressionType::PforDelta2dInt16;
+//     let scale_factor = 1.0;
+//     let add_offset = 0.0;
+
+//     {
+//         let file_handle = File::create(file)?;
+//         let mut file_writer = OmFileWriter::new(&file_handle, 8);
+//         let mut writer = file_writer
+//             .prepare_array::<f32>(
+//                 dims.clone(),
+//                 chunk_dimensions,
+//                 compression,
+//                 scale_factor,
+//                 add_offset,
+//             )
+//             .expect("Could not prepare writer");
+
+//         let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
+//         writer.write_data(&data, None, None, None)?;
+
+//         let variable_meta = writer.finalize();
+//         let variable = file_writer.write_array(variable_meta, "data", &[])?;
+//         file_writer.write_trailer(variable)?;
+//     }
+
+//     {
+//         // Open file for reading
+//         let file_for_reading = File::open(file)?;
+//         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+//         let backend = Arc::new(read_backend);
+//         let read = OmFileReader::new(backend.clone())?;
+
+//         // Rest of test remains the same but using read.read::<f32>() instead of read_var.read()
+//         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
+//         let expected = vec![
+//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//         ];
+//         assert_eq!(a, expected);
+
+//         // Single index checks
+//         for x in 0..5 {
+//             for y in 0..5 {
+//                 let value = read.read::<f32>(&[x..x + 1, y..y + 1], None, None)?;
+//                 assert_eq!(value, vec![(x * 5 + y) as f32]);
+//             }
+//         }
+
+//         // Read into existing array with offset
+//         for x in 0..5 {
+//             for y in 0..5 {
+//                 let mut r = vec![f32::NAN; 9];
+//                 read.read_into(
+//                     &mut r,
+//                     &[x..x + 1, y..y + 1],
+//                     &[1, 1],
+//                     &[3, 3],
+//                     Some(0),
+//                     Some(0),
+//                 )?;
+//                 let expected = vec![
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     (x * 5 + y) as f32,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                 ];
+//                 assert_eq_with_nan(&r, &expected, 0.001);
+//             }
+//         }
+
+//         // Rest of checks with read.read::<f32>()
+//         // 2x in fast dimension
+//         for x in 0..5 {
+//             for y in 0..4 {
+//                 let value = read.read::<f32>(&[x..x + 1, y..y + 2], None, None)?;
+//                 assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
+//             }
+//         }
+
+//         // 2x in slow dimension
+//         for x in 0..4 {
+//             for y in 0..5 {
+//                 let value = read.read::<f32>(&[x..x + 2, y..y + 1], None, None)?;
+//                 assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
+//             }
+//         }
+
+//         // 2x2 regions
+//         for x in 0..4 {
+//             for y in 0..4 {
+//                 let value = read.read::<f32>(&[x..x + 2, y..y + 2], None, None)?;
+//                 assert_eq!(
+//                     value,
+//                     vec![
+//                         (x * 5 + y) as f32,
+//                         (x * 5 + y + 1) as f32,
+//                         ((x + 1) * 5 + y) as f32,
+//                         ((x + 1) * 5 + y + 1) as f32,
+//                     ]
+//                 );
+//             }
+//         }
+
+//         // 3x3 regions
+//         for x in 0..3 {
+//             for y in 0..3 {
+//                 let value = read.read::<f32>(&[x..x + 3, y..y + 3], None, None)?;
+//                 assert_eq!(
+//                     value,
+//                     vec![
+//                         (x * 5 + y) as f32,
+//                         (x * 5 + y + 1) as f32,
+//                         (x * 5 + y + 2) as f32,
+//                         ((x + 1) * 5 + y) as f32,
+//                         ((x + 1) * 5 + y + 1) as f32,
+//                         ((x + 1) * 5 + y + 2) as f32,
+//                         ((x + 2) * 5 + y) as f32,
+//                         ((x + 2) * 5 + y + 1) as f32,
+//                         ((x + 2) * 5 + y + 2) as f32,
+//                     ]
+//                 );
+//             }
+//         }
+
+//         // 1x5 regions
+//         for x in 0..5 {
+//             let value = read.read::<f32>(&[x..x + 1, 0..5], None, None)?;
+//             assert_eq!(
+//                 value,
+//                 vec![
+//                     (x * 5) as f32,
+//                     (x * 5 + 1) as f32,
+//                     (x * 5 + 2) as f32,
+//                     (x * 5 + 3) as f32,
+//                     (x * 5 + 4) as f32,
+//                 ]
+//             );
+//         }
+
+//         // 5x1 regions
+//         for x in 0..5 {
+//             let value = read.read::<f32>(&[0..5, x..x + 1], None, None)?;
+//             assert_eq!(
+//                 value,
+//                 vec![
+//                     x as f32,
+//                     (x + 5) as f32,
+//                     (x + 10) as f32,
+//                     (x + 15) as f32,
+//                     (x + 20) as f32,
+//                 ]
+//             );
+//         }
+
+//         let count = backend.count();
+//         let bytes = backend.get_bytes(0, count as u64)?;
+//         assert_eq!(
+//             &bytes,
+//             &[
+//                 79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14,
+//                 197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0,
+//                 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0,
+//                 0, 0, 128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
+//                 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0,
+//                 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+//             ]
+//         );
+//     }
+
+//     remove_file_if_exists(file);
+//     Ok(())
+// }
+
+// #[test]
+// fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
+//     let file = "test_write_v3_max_io_limit.om";
+//     remove_file_if_exists(file);
+
+//     // Define dimensions and writer parameters
+//     let dims = vec![5, 5];
+//     let chunk_dimensions = vec![2, 2];
+//     let compression = CompressionType::PforDelta2dInt16;
+//     let scale_factor = 1.0;
+//     let add_offset = 0.0;
+
+//     {
+//         let file_handle = File::create(file)?;
+//         let mut file_writer = OmFileWriter::new(&file_handle, 8);
+//         let mut writer = file_writer
+//             .prepare_array::<f32>(
+//                 dims.clone(),
+//                 chunk_dimensions,
+//                 compression,
+//                 scale_factor,
+//                 add_offset,
+//             )
+//             .expect("Could not prepare writer");
+
+//         // Define the data to write
+//         let data: Vec<f32> = vec![
+//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//         ];
+
+//         writer.write_data(&data, None, None, None)?;
+
+//         let variable_meta = writer.finalize();
+//         let variable = file_writer.write_array(variable_meta, "data", &[])?;
+//         file_writer.write_trailer(variable)?;
+//     }
+
+//     {
+//         // Open the file for reading
+//         let file_for_reading = File::open(file)?;
+//         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+//         // Initialize the reader using the open_file method
+//         let read = OmFileReader::new(Arc::new(read_backend))?;
+
+//         // Read with io_size_max: 0, io_size_merge: 0
+//         let a = read.read::<f32>(&[0..5, 0..5], Some(0), Some(0))?;
+//         let expected = vec![
+//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+//         ];
+//         assert_eq!(a, expected);
+
+//         // Single index checks
+//         for x in 0..dims[0] {
+//             for y in 0..dims[1] {
+//                 let value = read.read::<f32>(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
+//                 assert_eq!(value, vec![(x * 5 + y) as f32]);
+//             }
+//         }
+
+//         // Read into an existing array with an offset
+//         for x in 0..dims[0] {
+//             for y in 0..dims[1] {
+//                 let mut r = vec![f32::NAN; 9];
+//                 read.read_into(
+//                     &mut r,
+//                     &[x..x + 1, y..y + 1],
+//                     &[1, 1],
+//                     &[3, 3],
+//                     Some(0),
+//                     Some(0),
+//                 )?;
+//                 let expected = vec![
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     (x * 5 + y) as f32,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                     f32::NAN,
+//                 ];
+//                 assert_eq_with_nan(&r, &expected, 0.001);
+//             }
+//         }
+
+//         // 2x in fast dimension
+//         for x in 0..dims[0] {
+//             for y in 0..dims[1] - 1 {
+//                 let value = read.read::<f32>(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
+//                 assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
+//             }
+//         }
+
+//         // 2x in slow dimension
+//         for x in 0..dims[0] - 1 {
+//             for y in 0..dims[1] {
+//                 let value = read.read::<f32>(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
+//                 assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
+//             }
+//         }
+
+//         // 2x2
+//         for x in 0..dims[0] - 1 {
+//             for y in 0..dims[1] - 1 {
+//                 let value = read.read::<f32>(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
+//                 assert_eq!(
+//                     value,
+//                     vec![
+//                         (x * 5 + y) as f32,
+//                         (x * 5 + y + 1) as f32,
+//                         ((x + 1) * 5 + y) as f32,
+//                         ((x + 1) * 5 + y + 1) as f32,
+//                     ]
+//                 );
+//             }
+//         }
+
+//         // 3x3
+//         for x in 0..dims[0] - 2 {
+//             for y in 0..dims[1] - 2 {
+//                 let value = read.read::<f32>(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
+//                 assert_eq!(
+//                     value,
+//                     vec![
+//                         (x * 5 + y) as f32,
+//                         (x * 5 + y + 1) as f32,
+//                         (x * 5 + y + 2) as f32,
+//                         ((x + 1) * 5 + y) as f32,
+//                         ((x + 1) * 5 + y + 1) as f32,
+//                         ((x + 1) * 5 + y + 2) as f32,
+//                         ((x + 2) * 5 + y) as f32,
+//                         ((x + 2) * 5 + y + 1) as f32,
+//                         ((x + 2) * 5 + y + 2) as f32,
+//                     ]
+//                 );
+//             }
+//         }
+
+//         // 1x5
+//         for x in 0..dims[1] {
+//             let value = read.read::<f32>(&[x..x + 1, 0..5], Some(0), Some(0))?;
+//             let expected = vec![
+//                 (x * 5) as f32,
+//                 (x * 5 + 1) as f32,
+//                 (x * 5 + 2) as f32,
+//                 (x * 5 + 3) as f32,
+//                 (x * 5 + 4) as f32,
+//             ];
+//             assert_eq!(value, expected);
+//         }
+
+//         // 5x1
+//         for x in 0..dims[0] {
+//             let value = read.read::<f32>(&[0..5, x..x + 1], Some(0), Some(0))?;
+//             let expected = vec![
+//                 x as f32,
+//                 (x + 5) as f32,
+//                 (x + 10) as f32,
+//                 (x + 15) as f32,
+//                 (x + 20) as f32,
+//             ];
+//             assert_eq!(value, expected);
+//         }
+//     }
+
+//     remove_file_if_exists(file);
+//     Ok(())
+// }
 
 #[test]
 fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
