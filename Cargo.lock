@@ -478,8 +478,6 @@ dependencies = [
  "num-traits",
  "om-file-format-sys",
  "rand",
- "serde",
- "serde_json",
 ]
 
 [[package]]

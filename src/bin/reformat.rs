@@ -47,7 +47,7 @@ fn main() -> io::Result<()> {
         .prepare_array::<f32>(
             dimensions.to_vec(),
             rechunked_dimensions.clone(),
-            CompressionType::P4nzdec256,
+            CompressionType::PforDelta2dInt16,
             reader.scale_factor(),
             reader.add_offset(),
         )

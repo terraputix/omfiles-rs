@@ -1,7 +1,6 @@
 use om_file_format_sys::OmDataType_t;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum DataType {
     None = 0,
