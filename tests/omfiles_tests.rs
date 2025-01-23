@@ -19,7 +19,7 @@ use std::{
 #[test]
 fn turbo_pfor_roundtrip() {
     let data: Vec<f32> = vec![10.0, 22.0, 23.0, 24.0];
-    let length = 1; //data.len();
+    let length = data.len();
 
     // create buffers for compression and decompression!
     let compressed_buffer = vec![0; 10];
@@ -56,7 +56,7 @@ fn turbo_pfor_roundtrip() {
     // this should be equal (we check it in the reader)
     // here we have a problem if length is only 1 and the exponent of the
     // float is greater than 0 (e.g. the value is greater than 10)
-    // NOTE: This fails with 4 != 5
+    // NOTE: This fails with 4 != 5 in the original turbo-pfor code
     assert_eq!(decompressed_size, compressed_size);
     assert_eq!(data[..length], decompressed[..length]);
 }
