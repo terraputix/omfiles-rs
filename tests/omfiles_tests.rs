@@ -1,4 +1,4 @@
-use ndarray::{s, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr, ViewRepr};
+use ndarray::{s, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr, RawData, ViewRepr};
 use om_file_format_sys::{fpxdec32, fpxenc32};
 use omfiles_rs::{
     backend::{
@@ -14,6 +14,7 @@ use std::{
     borrow::BorrowMut,
     f32::{self},
     fs::{self, File},
+    process::exit,
     sync::Arc,
 };
 
@@ -80,7 +81,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
         .prepare_array::<f32>(shape, chunks, CompressionType::PforDelta2dInt16, 1.0, 0.0)
         .expect("Could not prepare writer");
 
-    writer.write_data(&data, None, None, None)?;
+    writer.write_data(&data, None, None)?;
     let variable_meta = writer.finalize();
     let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
@@ -113,7 +114,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
         .prepare_array::<f32>(shape, chunks, CompressionType::FpxXor2d, 1.0, 0.0)
         .expect("Could not prepare writer");
 
-    writer.write_data(&data, None, None, None)?;
+    writer.write_data(&data, None, None)?;
     let variable_meta = writer.finalize();
     let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
@@ -143,7 +144,7 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
     // Try to write more data than the dimensions allow
     let too_much_data: Vec<f32> = (0..30).map(|x| x as f32).collect();
     let too_much_data = ArrayD::from_shape_vec(vec![5, 6], too_much_data).unwrap();
-    let result = writer.write_data(&too_much_data, None, None, None);
+    let result = writer.write_data(&too_much_data, None, None);
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert_eq!(err, OmFilesRsError::ChunkHasWrongNumberOfElements);
@@ -179,7 +180,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        writer.write_data(&data, None, None, None)?;
+        writer.write_data(&data, None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -208,94 +209,114 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// #[test]
-// fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
-//     let file = "test_write_chunks.om";
-//     remove_file_if_exists(file);
+#[test]
+fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
+    let file = "test_write_chunks.om";
+    remove_file_if_exists(file);
 
-//     // Set up the writer with the specified dimensions and chunk dimensions
-//     let dims = vec![5, 5];
-//     let chunk_dimensions = vec![2, 2];
-//     let compression = CompressionType::PforDelta2dInt16;
-//     let scale_factor = 1.0;
-//     let add_offset = 0.0;
+    // Set up the writer with the specified dimensions and chunk dimensions
+    let dims = vec![5, 5];
+    let chunk_dimensions = vec![2, 2];
+    let compression = CompressionType::PforDelta2dInt16;
+    let scale_factor = 1.0;
+    let add_offset = 0.0;
 
-//     {
-//         let file_handle = File::create(file)?;
-//         let mut file_writer = OmFileWriter::new(&file_handle, 8);
-//         let mut writer = file_writer
-//             .prepare_array::<f32>(
-//                 dims.clone(),
-//                 chunk_dimensions,
-//                 compression,
-//                 scale_factor,
-//                 add_offset,
-//             )
-//             .expect("Could not prepare writer");
+    {
+        let file_handle = File::create(file)?;
+        let mut file_writer = OmFileWriter::new(&file_handle, 8);
+        let mut writer = file_writer
+            .prepare_array::<f32>(
+                dims.clone(),
+                chunk_dimensions,
+                compression,
+                scale_factor,
+                add_offset,
+            )
+            .expect("Could not prepare writer");
 
-//         // Directly feed individual chunks
-//         writer.write_data(&[0.0, 1.0, 5.0, 6.0], Some(&[2, 2]), None, None)?;
-//         writer.write_data(&[2.0, 3.0, 7.0, 8.0], Some(&[2, 2]), None, None)?;
-//         writer.write_data(&[4.0, 9.0], Some(&[2, 1]), None, None)?;
-//         writer.write_data(&[10.0, 11.0, 15.0, 16.0], Some(&[2, 2]), None, None)?;
-//         writer.write_data(&[12.0, 13.0, 17.0, 18.0], Some(&[2, 2]), None, None)?;
-//         writer.write_data(&[14.0, 19.0], Some(&[2, 1]), None, None)?;
-//         writer.write_data(&[20.0, 21.0], Some(&[1, 2]), None, None)?;
-//         writer.write_data(&[22.0, 23.0], Some(&[1, 2]), None, None)?;
-//         writer.write_data(&[24.0], Some(&[1, 1]), None, None)?;
+        fn dyn_array2d<T>(
+            shape: [usize; 2],
+            data: Vec<T>,
+        ) -> ArrayBase<OwnedRepr<T>, Dim<IxDynImpl>> {
+            Array2::from_shape_vec(shape, data).unwrap().into_dyn()
+        }
 
-//         let variable_meta = writer.finalize();
-//         let variable = file_writer.write_array(variable_meta, "data", &[])?;
-//         file_writer.write_trailer(variable)?;
-//     }
+        // Directly feed individual chunks
+        writer.write_data(&dyn_array2d([2, 2], vec![0.0, 1.0, 5.0, 6.0]), None, None)?;
+        writer.write_data(&dyn_array2d([2, 2], vec![2.0, 3.0, 7.0, 8.0]), None, None)?;
+        writer.write_data(&dyn_array2d([2, 1], vec![4.0, 9.0]), None, None)?;
+        writer.write_data(
+            &dyn_array2d([2, 2], vec![10.0, 11.0, 15.0, 16.0]),
+            None,
+            None,
+        )?;
+        writer.write_data(
+            &dyn_array2d([2, 2], vec![12.0, 13.0, 17.0, 18.0]),
+            None,
+            None,
+        )?;
+        writer.write_data(&dyn_array2d([2, 1], vec![14.0, 19.0]), None, None)?;
+        writer.write_data(&dyn_array2d([1, 2], vec![20.0, 21.0]), None, None)?;
+        writer.write_data(&dyn_array2d([1, 2], vec![22.0, 23.0]), None, None)?;
+        writer.write_data(&dyn_array2d([1, 1], vec![24.0]), None, None)?;
 
-//     {
-//         // test reading
-//         let file_for_reading = File::open(file)?;
-//         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+        let variable_meta = writer.finalize();
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
+        file_writer.write_trailer(variable)?;
+    }
 
-//         let backend = Arc::new(read_backend);
+    {
+        // test reading
+        let file_for_reading = File::open(file)?;
+        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
 
-//         let read = OmFileReader::new(backend.clone())?;
+        let backend = Arc::new(read_backend);
 
-//         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
-//         let expected = vec![
-//             0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-//             16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-//         ];
-//         assert_eq!(a, expected);
-//     }
+        let read = OmFileReader::new(backend.clone())?;
 
-//     // let count = backend.count() as u64;
-//     // let bytes = backend.get_bytes(0, count)?;
+        let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
+        let expected = ArrayD::from_shape_vec(
+            vec![5, 5],
+            vec![
+                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+            ],
+        )
+        .unwrap();
 
-//     // // difference on x86 and ARM cause by the underlying compression
-//     // assert_eq!(
-//     //     bytes,
-//     // &[
-//     //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
-//     //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
-//     //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
-//     //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
-//     //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
-//     //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-//     // ]
-//     // );
-//     // assert_eq!(
-//     //     bytes,
-//     //     &[
-//     //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
-//     //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
-//     //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-//     //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
-//     //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
-//     //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-//     //     ]
-//     // );
+        assert_eq_with_accuracy_nd(&a, &expected, 0.01);
+    }
 
-//     remove_file_if_exists(file);
-//     Ok(())
-// }
+    // let count = backend.count() as u64;
+    // let bytes = backend.get_bytes(0, count)?;
+
+    // // difference on x86 and ARM cause by the underlying compression
+    // assert_eq!(
+    //     bytes,
+    // &[
+    //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
+    //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
+    //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
+    //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
+    //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
+    //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+    // ]
+    // );
+    // assert_eq!(
+    //     bytes,
+    //     &[
+    //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
+    //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
+    //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
+    //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
+    //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+    //     ]
+    // );
+
+    remove_file_if_exists(file);
+    Ok(())
+}
 
 // #[test]
 // fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
@@ -898,7 +919,7 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
             0.0,
         )?;
 
-        writer.write_data(&data, None, None, None)?;
+        writer.write_data(&data, None, None)?;
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;

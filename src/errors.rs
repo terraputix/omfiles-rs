@@ -29,6 +29,7 @@ pub enum OmFilesRsError {
     DecoderError(String),
     NotAnOmFile,
     NotImplementedError(String),
+    ArrayNotContiguous,
 }
 
 impl std::fmt::Display for OmFilesRsError {
@@ -92,6 +93,9 @@ impl std::fmt::Display for OmFilesRsError {
             }
             OmFilesRsError::NotImplementedError(e) => {
                 write!(f, "Not implemented: {}", e)
+            }
+            OmFilesRsError::ArrayNotContiguous => {
+                write!(f, "Array not contiguous")
             }
         }
     }

@@ -256,15 +256,38 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         }
     }
 
-    /// Compresses data and writes it to file.
     pub fn write_data(
         &mut self,
         array: &ArrayD<OmType>,
+        array_offset: Option<&[u64]>,
+        array_count: Option<&[u64]>,
+    ) -> Result<(), OmFilesRsError> {
+        let array_dimensions = array
+            .shape()
+            .iter()
+            .map(|&x| x as u64)
+            .collect::<Vec<u64>>();
+        let array = array.as_slice().ok_or(OmFilesRsError::ArrayNotContiguous)?;
+        self.write_data_flat(array, Some(&array_dimensions), array_offset, array_count)
+    }
+
+    /// Compresses data and writes it to file.
+    pub fn write_data_flat(
+        &mut self,
+        array: &[OmType],
         array_dimensions: Option<&[u64]>,
         array_offset: Option<&[u64]>,
         array_count: Option<&[u64]>,
     ) -> Result<(), OmFilesRsError> {
         let array_dimensions = array_dimensions.unwrap_or(&self.dimensions);
+        if array_dimensions.len() != self.dimensions.len() {
+            return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
+        }
+        for (array_dim, max_dim) in array_dimensions.iter().zip(self.dimensions.iter()) {
+            if array_dim > max_dim {
+                return Err(OmFilesRsError::ChunkHasWrongNumberOfElements);
+            }
+        }
         let default_offset = vec![0; array_dimensions.len()];
         let array_offset = array_offset.unwrap_or(default_offset.as_slice());
         let array_count = array_count.unwrap_or(array_dimensions);

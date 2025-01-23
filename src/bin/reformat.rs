@@ -77,7 +77,7 @@ fn main() -> io::Result<()> {
         let array_dyn = chunk_data.into_dyn();
 
         writer
-            .write_data(&array_dyn, Some(&[chunk_dim_0, dimensions[1]]), None, None)
+            .write_data(&array_dyn, None, None)
             .expect("Failed to write chunk data");
     }
 
