@@ -4,7 +4,7 @@ use omfiles_rs::{
         backends::{InMemoryBackend, OmFileReaderBackend},
         mmapfile::{MmapFile, Mode},
     },
-    core::compression::{p4ndec256_bound, p4nenc256_bound, CompressionType},
+    core::compression::CompressionType,
     errors::OmFilesRsError,
     io::{reader::OmFileReader, writer::OmFileWriter},
 };
@@ -22,9 +22,9 @@ fn turbo_pfor_roundtrip() {
     let length = 1; //data.len();
 
     // create buffers for compression and decompression!
-    let compressed_buffer = vec![0; p4nenc256_bound(length, 4)];
+    let compressed_buffer = vec![0; 10];
     let compressed = compressed_buffer.as_slice();
-    let decompress_buffer = vec![0.0; p4ndec256_bound(length, 4)];
+    let decompress_buffer = vec![0.0; 10];
     let decompressed = decompress_buffer.as_slice();
 
     // compress data
@@ -75,7 +75,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
         .prepare_array::<f32>(
             vec![1, data.len() as u64],
             vec![1, 10],
-            CompressionType::P4nzdec256,
+            CompressionType::PforDelta2dInt16,
             1.0,
             0.0,
         )
@@ -110,7 +110,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
         .prepare_array::<f32>(
             vec![1, data.len() as u64],
             vec![1, 10],
-            CompressionType::Fpxdec32,
+            CompressionType::FpxXor2d,
             1.0,
             0.0,
         )
@@ -137,7 +137,7 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
     let mut writer = file_writer.prepare_array::<f32>(
         vec![5, 5],
         vec![2, 2],
-        CompressionType::P4nzdec256,
+        CompressionType::PforDelta2dInt16,
         1.0,
         0.0,
     )?;
@@ -160,7 +160,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     // Set up the writer with the specified dimensions and chunk dimensions
     let dims = vec![100, 100, 10];
     let chunk_dimensions = vec![2, 2, 2];
-    let compression = CompressionType::P4nzdec256;
+    let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
@@ -212,7 +212,7 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
     // Set up the writer with the specified dimensions and chunk dimensions
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::P4nzdec256;
+    let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
@@ -301,7 +301,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
     // Set up the writer with the specified dimensions and chunk dimensions
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::P4nzdec256;
+    let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
@@ -409,7 +409,7 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
 
     let dims = vec![3, 3, 3];
     let chunk_dimensions = vec![2, 2, 2];
-    let compression = CompressionType::P4nzdec256;
+    let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
@@ -524,7 +524,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
 
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::P4nzdec256;
+    let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
@@ -710,7 +710,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     // Define dimensions and writer parameters
     let dims = vec![5, 5];
     let chunk_dimensions = vec![2, 2];
-    let compression = CompressionType::P4nzdec256;
+    let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
@@ -887,7 +887,7 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
         let mut writer = file_writer.prepare_array::<f32>(
             vec![5, 5],
             vec![5, 5],
-            CompressionType::P4nzdec256,
+            CompressionType::PforDelta2dInt16,
             1.0,
             0.0,
         )?;
