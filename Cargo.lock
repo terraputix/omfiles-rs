@@ -433,8 +433,6 @@ dependencies = [
  "memmap2",
  "om-file-format-sys",
  "rand",
- "serde",
- "serde_json",
 ]
 
 [[package]]

@@ -28,7 +28,7 @@ fn write_om_file(file: &str, data: &[f32]) {
         .prepare_array::<f32>(
             vec![DIM0_SIZE, DIM1_SIZE],
             vec![CHUNK0_SIZE, CHUNK1_SIZE],
-            CompressionType::P4nzdec256,
+            CompressionType::PforDelta2dInt16,
             1.0,
             0.0,
         )
