@@ -1,5 +1,5 @@
 use crate::backend::backends::OmFileWriterBackend;
-use crate::core::c_defaults::create_uninit_encoder;
+use crate::core::c_defaults::{c_error_string, create_uninit_encoder};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
@@ -8,10 +8,10 @@ use ndarray::ArrayD;
 use om_file_format_sys::{
     om_encoder_chunk_buffer_size, om_encoder_compress_chunk, om_encoder_compress_lut,
     om_encoder_compressed_chunk_buffer_size, om_encoder_count_chunks,
-    om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, om_error_string,
-    om_header_write, om_header_write_size, om_trailer_size, om_trailer_write,
-    om_variable_write_numeric_array, om_variable_write_numeric_array_size,
-    om_variable_write_scalar, om_variable_write_scalar_size, OmEncoder_t, OmError_t_ERROR_OK,
+    om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, om_header_write,
+    om_header_write_size, om_trailer_size, om_trailer_write, om_variable_write_numeric_array,
+    om_variable_write_numeric_array_size, om_variable_write_scalar, om_variable_write_scalar_size,
+    OmEncoder_t, OmError_t_ERROR_OK,
 };
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
@@ -238,11 +238,7 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         if error != OmError_t_ERROR_OK {
             return Err(OmFilesRsError::FileWriterError {
                 errno: error as i32,
-                error: unsafe {
-                    std::ffi::CStr::from_ptr(om_error_string(error))
-                        .to_string_lossy()
-                        .into_owned()
-                },
+                error: c_error_string(error),
             });
         }
 

@@ -63,6 +63,11 @@ pub trait OmFileReaderBackend {
         into: &mut ArrayD<OmType>,
         chunk_buffer: &mut [u8],
     ) -> Result<(), OmFilesRsError> {
+        #[allow(unused_mut)]
+        let mut into = into
+            .as_slice_mut()
+            .ok_or(OmFilesRsError::ArrayNotContiguous)?;
+
         let mut index_read = new_index_read(decoder);
         unsafe {
             // Loop over index blocks and read index data
@@ -107,12 +112,12 @@ pub trait OmFileReaderBackend {
                         &mut error,
                     ) {
                         let error_string = c_error_string(error);
-                        panic!("OmDecoder: {:}", &error_string);
+                        return Err(OmFilesRsError::DecoderError(error_string));
                     }
                 }
                 if error != OmError_t_ERROR_OK {
                     let error_string = c_error_string(error);
-                    panic!("OmDecoder: {:}", &error_string);
+                    return Err(OmFilesRsError::DecoderError(error_string));
                 }
             }
         }
