@@ -4,7 +4,7 @@ use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
 use crate::io::buffered_writer::OmBufferedWriter;
-use ndarray::ArrayD;
+use ndarray::ArrayViewD;
 use om_file_format_sys::{
     om_encoder_chunk_buffer_size, om_encoder_compress_chunk, om_encoder_compress_lut,
     om_encoder_compressed_chunk_buffer_size, om_encoder_count_chunks,
@@ -269,7 +269,7 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
     /// Writes an ndarray to the file.
     pub fn write_data(
         &mut self,
-        array: &ArrayD<OmType>,
+        array: ArrayViewD<OmType>,
         array_offset: Option<&[u64]>,
         array_count: Option<&[u64]>,
     ) -> Result<(), OmFilesRsError> {

@@ -69,7 +69,7 @@ fn main() -> io::Result<()> {
             .expect("Failed to read chunk data");
 
         writer
-            .write_data(&chunk_data, None, None)
+            .write_data(chunk_data.view(), None, None)
             .expect("Failed to write chunk data");
     }
 

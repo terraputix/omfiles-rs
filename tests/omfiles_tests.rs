@@ -1,4 +1,4 @@
-use ndarray::{s, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr, ViewRepr};
+use ndarray::{s, Array2, ArrayD, ArrayViewD};
 use om_file_format_sys::{fpxdec32, fpxenc32};
 use omfiles_rs::{
     backend::{
@@ -80,7 +80,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
         .prepare_array::<f32>(shape, chunks, CompressionType::PforDelta2dInt16, 1.0, 0.0)
         .expect("Could not prepare writer");
 
-    writer.write_data(&data, None, None)?;
+    writer.write_data(data.view(), None, None)?;
     let variable_meta = writer.finalize();
     let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
@@ -113,7 +113,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
         .prepare_array::<f32>(shape, chunks, CompressionType::FpxXor2d, 1.0, 0.0)
         .expect("Could not prepare writer");
 
-    writer.write_data(&data, None, None)?;
+    writer.write_data(data.view(), None, None)?;
     let variable_meta = writer.finalize();
     let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
@@ -143,7 +143,7 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
     // Try to write more data than the dimensions allow
     let too_much_data: Vec<f32> = (0..30).map(|x| x as f32).collect();
     let too_much_data = ArrayD::from_shape_vec(vec![5, 6], too_much_data).unwrap();
-    let result = writer.write_data(&too_much_data, None, None);
+    let result = writer.write_data(too_much_data.view(), None, None);
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert_eq!(err, OmFilesRsError::ChunkHasWrongNumberOfElements);
@@ -179,7 +179,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        writer.write_data(&data, None, None)?;
+        writer.write_data(data.view(), None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -228,32 +228,36 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
                 add_offset,
             )
             .expect("Could not prepare writer");
-
-        fn dyn_array2d<T>(
-            shape: [usize; 2],
-            data: Vec<T>,
-        ) -> ArrayBase<OwnedRepr<T>, Dim<IxDynImpl>> {
+        fn dyn_array2d<T>(shape: [usize; 2], data: Vec<T>) -> ArrayD<T> {
             Array2::from_shape_vec(shape, data).unwrap().into_dyn()
         }
 
         // Directly feed individual chunks
-        writer.write_data(&dyn_array2d([2, 2], vec![0.0, 1.0, 5.0, 6.0]), None, None)?;
-        writer.write_data(&dyn_array2d([2, 2], vec![2.0, 3.0, 7.0, 8.0]), None, None)?;
-        writer.write_data(&dyn_array2d([2, 1], vec![4.0, 9.0]), None, None)?;
         writer.write_data(
-            &dyn_array2d([2, 2], vec![10.0, 11.0, 15.0, 16.0]),
+            dyn_array2d([2, 2], vec![0.0, 1.0, 5.0, 6.0]).view(),
             None,
             None,
         )?;
         writer.write_data(
-            &dyn_array2d([2, 2], vec![12.0, 13.0, 17.0, 18.0]),
+            dyn_array2d([2, 2], vec![2.0, 3.0, 7.0, 8.0]).view(),
             None,
             None,
         )?;
-        writer.write_data(&dyn_array2d([2, 1], vec![14.0, 19.0]), None, None)?;
-        writer.write_data(&dyn_array2d([1, 2], vec![20.0, 21.0]), None, None)?;
-        writer.write_data(&dyn_array2d([1, 2], vec![22.0, 23.0]), None, None)?;
-        writer.write_data(&dyn_array2d([1, 1], vec![24.0]), None, None)?;
+        writer.write_data(dyn_array2d([2, 1], vec![4.0, 9.0]).view(), None, None)?;
+        writer.write_data(
+            dyn_array2d([2, 2], vec![10.0, 11.0, 15.0, 16.0]).view(),
+            None,
+            None,
+        )?;
+        writer.write_data(
+            dyn_array2d([2, 2], vec![12.0, 13.0, 17.0, 18.0]).view(),
+            None,
+            None,
+        )?;
+        writer.write_data(dyn_array2d([2, 1], vec![14.0, 19.0]).view(), None, None)?;
+        writer.write_data(dyn_array2d([1, 2], vec![20.0, 21.0]).view(), None, None)?;
+        writer.write_data(dyn_array2d([1, 2], vec![22.0, 23.0]).view(), None, None)?;
+        writer.write_data(dyn_array2d([1, 1], vec![24.0]).view(), None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -396,7 +400,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
 
         // Write data with array dimensions [7,7] and reading from [1..6, 1..6]
         let data = ArrayD::from_shape_vec(vec![7, 7], data).unwrap();
-        writer.write_data(&data, Some(&[1, 1]), Some(&[5, 5]))?;
+        writer.write_data(data.view(), Some(&[1, 1]), Some(&[5, 5]))?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -462,7 +466,7 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        writer.write_data(&data, None, None)?;
+        writer.write_data(data.view(), None, None)?;
 
         let variable_meta = writer.finalize();
         let int32_attribute = file_writer.write_scalar(12323154i32, "int32", &[])?;
@@ -579,7 +583,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        writer.write_data(&data, None, None)?;
+        writer.write_data(data.view(), None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -794,7 +798,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        writer.write_data(&data, None, None)?;
+        writer.write_data(data.view(), None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -846,7 +850,7 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
             0.0,
         )?;
 
-        writer.write_data(&data, None, None)?;
+        writer.write_data(data.view(), None, None)?;
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
@@ -871,16 +875,13 @@ fn copy_vec_u64_to_vec_usize(input: &Vec<u64>) -> Vec<usize> {
     input.iter().map(|&x| x as usize).collect()
 }
 
-fn nd_assert_eq_with_nan(
-    expected: &ArrayBase<OwnedRepr<f32>, Dim<IxDynImpl>>,
-    actual: &ArrayBase<OwnedRepr<f32>, Dim<IxDynImpl>>,
-) {
+fn nd_assert_eq_with_nan(expected: &ArrayD<f32>, actual: &ArrayD<f32>) {
     nd_assert_eq_with_accuracy_and_nan(expected.view(), actual.view(), f32::EPSILON);
 }
 
 fn nd_assert_eq_with_accuracy_and_nan(
-    expected: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
-    actual: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
+    expected: ArrayViewD<f32>,
+    actual: ArrayViewD<f32>,
     accuracy: f32,
 ) {
     assert_eq!(expected.shape(), actual.shape());
