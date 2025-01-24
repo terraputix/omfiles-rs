@@ -68,12 +68,6 @@ fn main() -> io::Result<()> {
             )
             .expect("Failed to read chunk data");
 
-        // let array_2d = ndarray::Array2::<f32>::from_shape_vec(
-        //     (chunk_dim_0 as usize, dimensions[1] as usize),
-        //     chunk_data.clone(),
-        // )
-        // .expect("Failed to create array from chunk data");
-
         let array_dyn = chunk_data.into_dyn();
 
         writer
@@ -90,14 +84,6 @@ fn main() -> io::Result<()> {
     file_writer
         .write_trailer(variable)
         .expect("Failed to write trailer");
-
-    // let array_offset = writer
-    //     .write_array(finalized_array, "data", &[])
-    //     .expect("Failed to write array metadata");
-
-    // file_writer
-    //     .write_trailer(array_offset)
-    //     .expect("Failed to write trailer");
 
     println!("Finished writing");
 

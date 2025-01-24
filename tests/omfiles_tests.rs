@@ -1,4 +1,4 @@
-use ndarray::{s, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr, RawData, ViewRepr};
+use ndarray::{s, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr, ViewRepr};
 use om_file_format_sys::{fpxdec32, fpxenc32};
 use omfiles_rs::{
     backend::{
@@ -14,7 +14,6 @@ use std::{
     borrow::BorrowMut,
     f32::{self},
     fs::{self, File},
-    process::exit,
     sync::Arc,
 };
 
@@ -91,7 +90,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
     let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-    assert_eq_with_accuracy_nd(&must_equal, &uncompressed, 0.001);
+    nd_assert_eq_with_nan(&must_equal, &uncompressed);
 
     Ok(())
 }
@@ -124,7 +123,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
     let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-    assert_eq_with_accuracy_nd(&must_equal, &uncompressed, 0.001);
+    nd_assert_eq_with_nan(&must_equal, &uncompressed);
 
     Ok(())
 }
@@ -198,11 +197,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
         let a = read.read::<f32>(&[0..100, 0..100, 0..10], None, None)?;
         assert_eq!(a.len(), data.len());
         let range = s![0..100, 0..1, 0..1];
-        assert_eq_with_accuracy_nd_slice(
-            a.slice(range).into_dyn(),
-            data.slice(range).into_dyn(),
-            0.01,
-        );
+        assert_eq!(a.slice(range), data.slice(range));
     }
 
     remove_file_if_exists(file);
@@ -284,35 +279,37 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
         )
         .unwrap();
 
-        assert_eq_with_accuracy_nd(&a, &expected, 0.01);
+        assert_eq!(a, expected);
+
+        // check the actual bytes of the file
+        let count = backend.count() as u64;
+        assert_eq!(count, 144);
+
+        // let bytes = backend.get_bytes(0, count)?;
+        // // difference on x86 and ARM cause by the underlying compression
+        // assert_eq!(
+        //     bytes,
+        // &[
+        //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
+        //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
+        //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
+        //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
+        //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
+        //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+        // ]
+        // );
+        // assert_eq!(
+        //     bytes,
+        //     &[
+        //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
+        //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
+        //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
+        //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
+        //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+        //     ]
+        // );
     }
-
-    // let count = backend.count() as u64;
-    // let bytes = backend.get_bytes(0, count)?;
-
-    // // difference on x86 and ARM cause by the underlying compression
-    // assert_eq!(
-    //     bytes,
-    // &[
-    //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
-    //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
-    //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
-    //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
-    //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
-    //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    // ]
-    // );
-    // assert_eq!(
-    //     bytes,
-    //     &[
-    //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
-    //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
-    //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
-    //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
-    //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    //     ]
-    // );
 
     remove_file_if_exists(file);
     Ok(())
@@ -425,7 +422,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
         )
         .unwrap();
 
-        assert_eq_with_accuracy_nd(&a, &expected, 0.001);
+        assert_eq!(a, expected);
     }
 
     remove_file_if_exists(file);
@@ -442,11 +439,6 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
-
-    let blub = [
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-        17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0,
-    ];
 
     let data = ArrayD::from_shape_vec(
         copy_vec_u64_to_vec_usize(&dims),
@@ -507,7 +499,10 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
             for y in 0..dims[1] {
                 for z in 0..dims[2] {
                     let value = read.read::<f32>(&[x..x + 1, y..y + 1, z..z + 1], None, None)?;
-                    assert_eq!(*value.first().unwrap(), (x * 9 + y * 3 + z) as f32);
+                    let expected =
+                        ArrayD::from_shape_vec(vec![1, 1, 1], vec![(x * 9 + y * 3 + z) as f32])
+                            .unwrap();
+                    assert_eq!(value, expected);
                 }
             }
         }
@@ -640,7 +635,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
                     ],
                 )
                 .unwrap();
-                assert_eq_with_accuracy_nd(&r, &expected, 0.001);
+                nd_assert_eq_with_nan(&r, &expected);
             }
         }
 
@@ -876,9 +871,16 @@ fn copy_vec_u64_to_vec_usize(input: &Vec<u64>) -> Vec<usize> {
     input.iter().map(|&x| x as usize).collect()
 }
 
-fn assert_eq_with_accuracy_nd(
+fn nd_assert_eq_with_nan(
     expected: &ArrayBase<OwnedRepr<f32>, Dim<IxDynImpl>>,
     actual: &ArrayBase<OwnedRepr<f32>, Dim<IxDynImpl>>,
+) {
+    nd_assert_eq_with_accuracy_and_nan(expected.view(), actual.view(), f32::EPSILON);
+}
+
+fn nd_assert_eq_with_accuracy_and_nan(
+    expected: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
+    actual: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
     accuracy: f32,
 ) {
     assert_eq!(expected.shape(), actual.shape());
@@ -888,41 +890,6 @@ fn assert_eq_with_accuracy_nd(
         } else {
             assert!(
                 (e - a).abs() < accuracy,
-                "Values differ: expected {}, found {}",
-                e,
-                a
-            );
-        }
-    }
-}
-
-fn assert_eq_with_accuracy_nd_slice(
-    expected: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
-    actual: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
-    accuracy: f32,
-) {
-    assert_eq!(expected.shape(), actual.shape());
-    for (e, a) in expected.iter().zip(actual.iter()) {
-        assert!((e - a).abs() < accuracy, "Expected: {}, Actual: {}", e, a);
-    }
-}
-
-fn assert_eq_with_accuracy(expected: &[f32], actual: &[f32], accuracy: f32) {
-    assert_eq!(expected.len(), actual.len());
-    for (e, a) in expected.iter().zip(actual.iter()) {
-        assert!((e - a).abs() < accuracy, "Expected: {}, Actual: {}", e, a);
-    }
-}
-
-// Helper function to assert equality with NaN handling and a specified accuracy
-fn assert_eq_with_nan(actual: &[f32], expected: &[f32], accuracy: f32) {
-    assert_eq!(actual.len(), expected.len(), "Lengths differ");
-    for (a, e) in actual.iter().zip(expected.iter()) {
-        if e.is_nan() {
-            assert!(a.is_nan(), "Expected NaN, found {}", a);
-        } else {
-            assert!(
-                (a - e).abs() <= accuracy,
                 "Values differ: expected {}, found {}",
                 e,
                 a
