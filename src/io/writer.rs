@@ -270,6 +270,7 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         })
     }
 
+    /// Writes an ndarray to the file.
     pub fn write_data(
         &mut self,
         array: &ArrayD<OmType>,

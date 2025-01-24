@@ -90,7 +90,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
     let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-    nd_assert_eq_with_nan(&must_equal, &uncompressed);
+    assert_eq!(&must_equal, &uncompressed);
 
     Ok(())
 }
@@ -123,7 +123,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
     let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-    nd_assert_eq_with_nan(&must_equal, &uncompressed);
+    assert_eq!(&must_equal, &uncompressed);
 
     Ok(())
 }

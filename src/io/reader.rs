@@ -187,7 +187,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     }
 
     /// Read a variable as an array of a dynamic data type.
-    pub fn read_into<T: OmFileArrayDataType + Clone>(
+    pub fn read_into<T: OmFileArrayDataType>(
         &self,
         into: &mut ArrayD<T>,
         dim_read: &[Range<u64>],

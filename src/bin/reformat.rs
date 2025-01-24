@@ -68,10 +68,8 @@ fn main() -> io::Result<()> {
             )
             .expect("Failed to read chunk data");
 
-        let array_dyn = chunk_data.into_dyn();
-
         writer
-            .write_data(&array_dyn, None, None)
+            .write_data(&chunk_data, None, None)
             .expect("Failed to write chunk data");
     }
 
