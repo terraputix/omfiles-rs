@@ -24,8 +24,6 @@ use std::sync::Arc;
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     /// The backend that provides data via the get_bytes method
     pub backend: Arc<Backend>,
-    /// Holds the data of the header, is not supposed to go out of scope
-    // pub header_data: Vec<u8>,
     /// Holds the data where the meta information of the variable is stored, is not supposed to go out of scope
     /// Here the LUT and additional attributes of the variable need to be stored.
     pub variable_data: Vec<u8>,
@@ -209,8 +207,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let n_dimensions = dim_read.len();
 
         // Validate dimension counts
-        assert_eq!(into_cube_offset.len(), n_dimensions);
-        assert_eq!(into_cube_dimension.len(), n_dimensions);
+        if n_dimensions != into_cube_offset.len() || n_dimensions != into_cube_dimension.len() {
+            return Err(OmFilesRsError::MismatchingCubeDimensionLength);
+        }
 
         // Prepare read parameters
         let read_offset: Vec<u64> = dim_read.iter().map(|r| r.start).collect();

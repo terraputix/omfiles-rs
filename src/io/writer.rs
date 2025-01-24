@@ -211,7 +211,6 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         add_offset: f32,
         buffer: &'a mut OmBufferedWriter<Backend>,
     ) -> Self {
-        // Verify OmType matches data_type
         assert_eq!(OmType::DATA_TYPE_ARRAY, data_type, "Data type mismatch");
         assert_eq!(dimensions.len(), chunk_dimensions.len());
 
