@@ -28,6 +28,8 @@ path = "src/bin/reformat.rs"
 [dependencies]
 memmap2 = "0.9.4"
 om-file-format-sys = { version = "1.0.3" }
+ndarray = "0.16.0"
+num-traits = "0.2.14"
 
 [dev-dependencies]
 criterion = "0.5.1"

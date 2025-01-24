@@ -21,6 +21,7 @@ pub enum OmFilesRsError {
     },
     ChunkDimensionIsSmallerThanOverallDim,
     DimensionMustBeLargerThan0,
+    MismatchingCubeDimensionLength,
     FileExistsAlready {
         filename: String,
     },
@@ -29,6 +30,7 @@ pub enum OmFilesRsError {
     DecoderError(String),
     NotAnOmFile,
     NotImplementedError(String),
+    ArrayNotContiguous,
 }
 
 impl std::fmt::Display for OmFilesRsError {
@@ -75,6 +77,9 @@ impl std::fmt::Display for OmFilesRsError {
             OmFilesRsError::DimensionMustBeLargerThan0 => {
                 write!(f, "Dimension must be larger than 0")
             }
+            OmFilesRsError::MismatchingCubeDimensionLength => {
+                write!(f, "Mismatching cube dimension length")
+            }
             OmFilesRsError::FileExistsAlready { filename } => {
                 write!(f, "File '{}' already exists", filename)
             }
@@ -92,6 +97,9 @@ impl std::fmt::Display for OmFilesRsError {
             }
             OmFilesRsError::NotImplementedError(e) => {
                 write!(f, "Not implemented: {}", e)
+            }
+            OmFilesRsError::ArrayNotContiguous => {
+                write!(f, "Array not contiguous")
             }
         }
     }

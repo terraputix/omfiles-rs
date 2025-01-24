@@ -34,7 +34,7 @@ fn write_om_file(file: &str, data: &[f32]) {
         )
         .unwrap();
 
-    writer.write_data(data, None, None, None).unwrap();
+    writer.write_data_flat(data, None, None, None).unwrap();
     let variable_meta = writer.finalize();
     let variable = file_writer.write_array(variable_meta, "data", &[]).unwrap();
     file_writer.write_trailer(variable).unwrap();
@@ -57,13 +57,13 @@ pub fn benchmark_in_memory(c: &mut Criterion) {
                     .prepare_array::<f32>(
                         vec![DIM0_SIZE, DIM1_SIZE],
                         vec![CHUNK0_SIZE, CHUNK1_SIZE],
-                        CompressionType::Fpxdec32,
+                        CompressionType::FpxXor2d,
                         0.1,
                         0.0,
                     )
                     .unwrap();
 
-                black_box(writer.write_data(&data, None, None, None).unwrap());
+                black_box(writer.write_data_flat(&data, None, None, None).unwrap());
                 let variable_meta = writer.finalize();
                 let variable = file_writer.write_array(variable_meta, "data", &[]).unwrap();
                 black_box(file_writer.write_trailer(variable).unwrap());

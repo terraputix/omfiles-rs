@@ -69,12 +69,7 @@ fn main() -> io::Result<()> {
             .expect("Failed to read chunk data");
 
         writer
-            .write_data(
-                chunk_data.as_slice(),
-                Some(&[chunk_dim_0, dimensions[1]]),
-                None,
-                None,
-            )
+            .write_data(&chunk_data, None, None)
             .expect("Failed to write chunk data");
     }
 
@@ -87,14 +82,6 @@ fn main() -> io::Result<()> {
     file_writer
         .write_trailer(variable)
         .expect("Failed to write trailer");
-
-    // let array_offset = writer
-    //     .write_array(finalized_array, "data", &[])
-    //     .expect("Failed to write array metadata");
-
-    // file_writer
-    //     .write_trailer(array_offset)
-    //     .expect("Failed to write trailer");
 
     println!("Finished writing");
 

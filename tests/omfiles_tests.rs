@@ -1,3 +1,4 @@
+use ndarray::{s, Array2, ArrayBase, ArrayD, Dim, IxDynImpl, OwnedRepr, ViewRepr};
 use om_file_format_sys::{fpxdec32, fpxenc32};
 use omfiles_rs::{
     backend::{
@@ -67,21 +68,19 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
         0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
         17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
     ];
+    let shape: Vec<u64> = vec![1, data.len() as u64];
+    let chunks: Vec<u64> = vec![1, 10];
+    let data = ArrayD::from_shape_vec(copy_vec_u64_to_vec_usize(&shape), data).unwrap();
+
     let must_equal = data.clone();
     let mut in_memory_backend = InMemoryBackend::new(vec![]);
     let mut file_writer = OmFileWriter::new(in_memory_backend.borrow_mut(), 8);
 
     let mut writer = file_writer
-        .prepare_array::<f32>(
-            vec![1, data.len() as u64],
-            vec![1, 10],
-            CompressionType::PforDelta2dInt16,
-            1.0,
-            0.0,
-        )
+        .prepare_array::<f32>(shape, chunks, CompressionType::PforDelta2dInt16, 1.0, 0.0)
         .expect("Could not prepare writer");
 
-    writer.write_data(&data, None, None, None)?;
+    writer.write_data(&data, None, None)?;
     let variable_meta = writer.finalize();
     let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
@@ -91,7 +90,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
     let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-    assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
+    assert_eq!(&must_equal, &uncompressed);
 
     Ok(())
 }
@@ -102,21 +101,19 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
         0.0, 5.0, 2.0, 3.0, 2.0, 5.0, 6.0, 2.0, 8.0, 3.0, 10.0, 14.0, 12.0, 15.0, 14.0, 15.0, 66.0,
         17.0, 12.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
     ];
+    let shape: Vec<u64> = vec![1, data.len() as u64];
+    let chunks: Vec<u64> = vec![1, 10];
+    let data = ArrayD::from_shape_vec(copy_vec_u64_to_vec_usize(&shape), data).unwrap();
+
     let must_equal = data.clone();
     let mut in_memory_backend = InMemoryBackend::new(vec![]);
     let mut file_writer = OmFileWriter::new(in_memory_backend.borrow_mut(), 8);
 
     let mut writer = file_writer
-        .prepare_array::<f32>(
-            vec![1, data.len() as u64],
-            vec![1, 10],
-            CompressionType::FpxXor2d,
-            1.0,
-            0.0,
-        )
+        .prepare_array::<f32>(shape, chunks, CompressionType::FpxXor2d, 1.0, 0.0)
         .expect("Could not prepare writer");
 
-    writer.write_data(&data, None, None, None)?;
+    writer.write_data(&data, None, None)?;
     let variable_meta = writer.finalize();
     let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
@@ -126,10 +123,11 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
     let read = OmFileReader::new(Arc::new(in_memory_backend))?;
     let uncompressed = read.read::<f32>(&[0u64..1, 0..data.len() as u64], None, None)?;
 
-    assert_eq_with_accuracy(&must_equal, &uncompressed, 0.001);
+    assert_eq!(&must_equal, &uncompressed);
 
     Ok(())
 }
+
 #[test]
 fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>> {
     let mut in_memory_backend = InMemoryBackend::new(vec![]);
@@ -144,7 +142,8 @@ fn test_write_more_data_than_expected() -> Result<(), Box<dyn std::error::Error>
 
     // Try to write more data than the dimensions allow
     let too_much_data: Vec<f32> = (0..30).map(|x| x as f32).collect();
-    let result = writer.write_data(&too_much_data, None, None, None);
+    let too_much_data = ArrayD::from_shape_vec(vec![5, 6], too_much_data).unwrap();
+    let result = writer.write_data(&too_much_data, None, None);
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert_eq!(err, OmFilesRsError::ChunkHasWrongNumberOfElements);
@@ -165,6 +164,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
     let add_offset = 0.0;
 
     let data: Vec<f32> = (0..100000).map(|x| (x % 10000) as f32).collect();
+    let data = ArrayD::from_shape_vec(copy_vec_u64_to_vec_usize(&dims), data)?;
 
     {
         let file_handle = File::create(file)?;
@@ -179,7 +179,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        writer.write_data(&data, None, None, None)?;
+        writer.write_data(&data, None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -192,12 +192,12 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
         let read = OmFileReader::new(Arc::new(read_backend))?;
 
         let a1 = read.read::<f32>(&[50..51, 20..21, 1..2], None, None)?;
-        assert_eq!(a1, vec![201.0]);
+        assert_eq!(a1.as_slice().unwrap(), &vec![201.0]);
 
         let a = read.read::<f32>(&[0..100, 0..100, 0..10], None, None)?;
         assert_eq!(a.len(), data.len());
-        let range = 0..100;
-        assert_eq!(a[range.clone()], data[range]);
+        let range = s![0..100, 0..1, 0..1];
+        assert_eq!(a.slice(range), data.slice(range));
     }
 
     remove_file_if_exists(file);
@@ -229,16 +229,31 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
+        fn dyn_array2d<T>(
+            shape: [usize; 2],
+            data: Vec<T>,
+        ) -> ArrayBase<OwnedRepr<T>, Dim<IxDynImpl>> {
+            Array2::from_shape_vec(shape, data).unwrap().into_dyn()
+        }
+
         // Directly feed individual chunks
-        writer.write_data(&[0.0, 1.0, 5.0, 6.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[2.0, 3.0, 7.0, 8.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[4.0, 9.0], Some(&[2, 1]), None, None)?;
-        writer.write_data(&[10.0, 11.0, 15.0, 16.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[12.0, 13.0, 17.0, 18.0], Some(&[2, 2]), None, None)?;
-        writer.write_data(&[14.0, 19.0], Some(&[2, 1]), None, None)?;
-        writer.write_data(&[20.0, 21.0], Some(&[1, 2]), None, None)?;
-        writer.write_data(&[22.0, 23.0], Some(&[1, 2]), None, None)?;
-        writer.write_data(&[24.0], Some(&[1, 1]), None, None)?;
+        writer.write_data(&dyn_array2d([2, 2], vec![0.0, 1.0, 5.0, 6.0]), None, None)?;
+        writer.write_data(&dyn_array2d([2, 2], vec![2.0, 3.0, 7.0, 8.0]), None, None)?;
+        writer.write_data(&dyn_array2d([2, 1], vec![4.0, 9.0]), None, None)?;
+        writer.write_data(
+            &dyn_array2d([2, 2], vec![10.0, 11.0, 15.0, 16.0]),
+            None,
+            None,
+        )?;
+        writer.write_data(
+            &dyn_array2d([2, 2], vec![12.0, 13.0, 17.0, 18.0]),
+            None,
+            None,
+        )?;
+        writer.write_data(&dyn_array2d([2, 1], vec![14.0, 19.0]), None, None)?;
+        writer.write_data(&dyn_array2d([1, 2], vec![20.0, 21.0]), None, None)?;
+        writer.write_data(&dyn_array2d([1, 2], vec![22.0, 23.0]), None, None)?;
+        writer.write_data(&dyn_array2d([1, 1], vec![24.0]), None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -255,39 +270,46 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
         let read = OmFileReader::new(backend.clone())?;
 
         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
+        let expected = ArrayD::from_shape_vec(
+            vec![5, 5],
+            vec![
+                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+            ],
+        )
+        .unwrap();
+
         assert_eq!(a, expected);
+
+        // check the actual bytes of the file
+        let count = backend.count() as u64;
+        assert_eq!(count, 144);
+
+        // let bytes = backend.get_bytes(0, count)?;
+        // // difference on x86 and ARM cause by the underlying compression
+        // assert_eq!(
+        //     bytes,
+        // &[
+        //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
+        //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
+        //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
+        //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
+        //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
+        //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+        // ]
+        // );
+        // assert_eq!(
+        //     bytes,
+        //     &[
+        //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
+        //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
+        //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
+        //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
+        //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
+        //     ]
+        // );
     }
-
-    // let count = backend.count() as u64;
-    // let bytes = backend.get_bytes(0, count)?;
-
-    // // difference on x86 and ARM cause by the underlying compression
-    // assert_eq!(
-    //     bytes,
-    // &[
-    //     79, 77, 3, 0, 4, 130, 0, 2, 3, 34, 0, 4, 194, 2, 10, 4, 178, 0, 12, 4, 242, 0, 14, 197,
-    //     17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0,
-    //     6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63,
-    //     0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2,
-    //     0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0, 40, 0, 0,
-    //     0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    // ]
-    // );
-    // assert_eq!(
-    //     bytes,
-    //     &[
-    //         79, 77, 3, 0, 4, 130, 64, 2, 3, 34, 16, 4, 194, 2, 10, 4, 178, 64, 12, 4, 242, 64, 14,
-    //         197, 17, 20, 194, 2, 22, 194, 2, 24, 3, 3, 228, 200, 109, 1, 0, 0, 20, 0, 4, 0, 0, 0,
-    //         0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    //         128, 63, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
-    //         0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 100, 97, 116, 97, 0, 0, 0, 0, 79, 77, 3, 0, 0, 0, 0, 0,
-    //         40, 0, 0, 0, 0, 0, 0, 0, 76, 0, 0, 0, 0, 0, 0, 0
-    //     ]
-    // );
 
     remove_file_if_exists(file);
     Ok(())
@@ -373,7 +395,8 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Could not prepare writer");
 
         // Write data with array dimensions [7,7] and reading from [1..6, 1..6]
-        writer.write_data(&data, Some(&[7, 7]), Some(&[1, 1]), Some(&[5, 5]))?;
+        let data = ArrayD::from_shape_vec(vec![7, 7], data).unwrap();
+        writer.write_data(&data, Some(&[1, 1]), Some(&[5, 5]))?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -390,10 +413,14 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
 
         // Expected data
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
+        let expected = ArrayD::from_shape_vec(
+            vec![5, 5],
+            vec![
+                0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+            ],
+        )
+        .unwrap();
 
         assert_eq!(a, expected);
     }
@@ -413,10 +440,14 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
-    let data: Vec<f32> = vec![
-        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-        17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0,
-    ];
+    let data = ArrayD::from_shape_vec(
+        copy_vec_u64_to_vec_usize(&dims),
+        vec![
+            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0,
+        ],
+    )
+    .unwrap();
 
     {
         let file_handle = File::create(file)?;
@@ -431,7 +462,7 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        writer.write_data(&data, None, None, None)?;
+        writer.write_data(&data, None, None)?;
 
         let variable_meta = writer.finalize();
         let int32_attribute = file_writer.write_scalar(12323154i32, "int32", &[])?;
@@ -468,7 +499,10 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
             for y in 0..dims[1] {
                 for z in 0..dims[2] {
                     let value = read.read::<f32>(&[x..x + 1, y..y + 1, z..z + 1], None, None)?;
-                    assert_eq!(value, vec![(x * 9 + y * 3 + z) as f32]);
+                    let expected =
+                        ArrayD::from_shape_vec(vec![1, 1, 1], vec![(x * 9 + y * 3 + z) as f32])
+                            .unwrap();
+                    assert_eq!(value, expected);
                 }
             }
         }
@@ -528,6 +562,10 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     let scale_factor = 1.0;
     let add_offset = 0.0;
 
+    let data = ArrayD::from_shape_fn(copy_vec_u64_to_vec_usize(&dims), |x| {
+        (x[0] * 5 + x[1]) as f32
+    });
+
     {
         let file_handle = File::create(file)?;
         let mut file_writer = OmFileWriter::new(&file_handle, 8);
@@ -541,8 +579,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        let data: Vec<f32> = (0..25).map(|x| x as f32).collect();
-        writer.write_data(&data, None, None, None)?;
+        writer.write_data(&data, None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -558,24 +595,23 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
 
         // Rest of test remains the same but using read.read::<f32>() instead of read_var.read()
         let a = read.read::<f32>(&[0..5, 0..5], None, None)?;
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
+        let expected = data.clone();
         assert_eq!(a, expected);
 
         // Single index checks
         for x in 0..5 {
             for y in 0..5 {
                 let value = read.read::<f32>(&[x..x + 1, y..y + 1], None, None)?;
-                assert_eq!(value, vec![(x * 5 + y) as f32]);
+                let expected =
+                    ArrayD::from_shape_vec(vec![1, 1], vec![(x * 5 + y) as f32]).unwrap();
+                assert_eq!(value, expected);
             }
         }
 
         // Read into existing array with offset
         for x in 0..5 {
             for y in 0..5 {
-                let mut r = vec![f32::NAN; 9];
+                let mut r = ArrayD::from_elem(vec![3, 3], f32::NAN);
                 read.read_into(
                     &mut r,
                     &[x..x + 1, y..y + 1],
@@ -584,18 +620,22 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
                     Some(0),
                     Some(0),
                 )?;
-                let expected = vec![
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    (x * 5 + y) as f32,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                ];
-                assert_eq_with_nan(&r, &expected, 0.001);
+                let expected = ArrayD::from_shape_vec(
+                    vec![3, 3],
+                    vec![
+                        f32::NAN,
+                        f32::NAN,
+                        f32::NAN,
+                        f32::NAN,
+                        (x * 5 + y) as f32,
+                        f32::NAN,
+                        f32::NAN,
+                        f32::NAN,
+                        f32::NAN,
+                    ],
+                )
+                .unwrap();
+                nd_assert_eq_with_nan(&r, &expected);
             }
         }
 
@@ -604,7 +644,12 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         for x in 0..5 {
             for y in 0..4 {
                 let value = read.read::<f32>(&[x..x + 1, y..y + 2], None, None)?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
+                let expected = ArrayD::from_shape_vec(
+                    vec![1, 2],
+                    vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32],
+                )
+                .unwrap();
+                assert_eq!(value, expected);
             }
         }
 
@@ -612,7 +657,12 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         for x in 0..4 {
             for y in 0..5 {
                 let value = read.read::<f32>(&[x..x + 2, y..y + 1], None, None)?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
+                let expected = ArrayD::from_shape_vec(
+                    vec![2, 1],
+                    vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32],
+                )
+                .unwrap();
+                assert_eq!(value, expected);
             }
         }
 
@@ -620,15 +670,17 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         for x in 0..4 {
             for y in 0..4 {
                 let value = read.read::<f32>(&[x..x + 2, y..y + 2], None, None)?;
-                assert_eq!(
-                    value,
+                let expected = ArrayD::from_shape_vec(
+                    vec![2, 2],
                     vec![
                         (x * 5 + y) as f32,
                         (x * 5 + y + 1) as f32,
                         ((x + 1) * 5 + y) as f32,
                         ((x + 1) * 5 + y + 1) as f32,
-                    ]
-                );
+                    ],
+                )
+                .unwrap();
+                assert_eq!(value, expected);
             }
         }
 
@@ -636,8 +688,8 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         for x in 0..3 {
             for y in 0..3 {
                 let value = read.read::<f32>(&[x..x + 3, y..y + 3], None, None)?;
-                assert_eq!(
-                    value,
+                let expected = ArrayD::from_shape_vec(
+                    vec![3, 3],
                     vec![
                         (x * 5 + y) as f32,
                         (x * 5 + y + 1) as f32,
@@ -648,39 +700,45 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
                         ((x + 2) * 5 + y) as f32,
                         ((x + 2) * 5 + y + 1) as f32,
                         ((x + 2) * 5 + y + 2) as f32,
-                    ]
-                );
+                    ],
+                )
+                .unwrap();
+                assert_eq!(value, expected);
             }
         }
 
         // 1x5 regions
         for x in 0..5 {
             let value = read.read::<f32>(&[x..x + 1, 0..5], None, None)?;
-            assert_eq!(
-                value,
+            let expected = ArrayD::from_shape_vec(
+                vec![1, 5],
                 vec![
                     (x * 5) as f32,
                     (x * 5 + 1) as f32,
                     (x * 5 + 2) as f32,
                     (x * 5 + 3) as f32,
                     (x * 5 + 4) as f32,
-                ]
-            );
+                ],
+            )
+            .unwrap();
+            assert_eq!(value, expected);
         }
 
         // 5x1 regions
         for x in 0..5 {
             let value = read.read::<f32>(&[0..5, x..x + 1], None, None)?;
-            assert_eq!(
-                value,
+            let expected = ArrayD::from_shape_vec(
+                vec![5, 1],
                 vec![
-                    x as f32,
+                    (x) as f32,
                     (x + 5) as f32,
                     (x + 10) as f32,
                     (x + 15) as f32,
                     (x + 20) as f32,
-                ]
-            );
+                ],
+            )
+            .unwrap();
+            assert_eq!(value, expected);
         }
 
         let count = backend.count();
@@ -713,6 +771,15 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
     let compression = CompressionType::PforDelta2dInt16;
     let scale_factor = 1.0;
     let add_offset = 0.0;
+    // Define the data to write
+    let data = ArrayD::from_shape_vec(
+        copy_vec_u64_to_vec_usize(&dims),
+        vec![
+            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
+        ],
+    )
+    .unwrap();
 
     {
         let file_handle = File::create(file)?;
@@ -727,13 +794,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
             )
             .expect("Could not prepare writer");
 
-        // Define the data to write
-        let data: Vec<f32> = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
-
-        writer.write_data(&data, None, None, None)?;
+        writer.write_data(&data, None, None)?;
 
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
@@ -749,124 +810,15 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
 
         // Read with io_size_max: 0, io_size_merge: 0
         let a = read.read::<f32>(&[0..5, 0..5], Some(0), Some(0))?;
-        let expected = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-            16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0,
-        ];
+        let expected = data.clone();
         assert_eq!(a, expected);
 
         // Single index checks
         for x in 0..dims[0] {
             for y in 0..dims[1] {
                 let value = read.read::<f32>(&[x..x + 1, y..y + 1], Some(0), Some(0))?;
-                assert_eq!(value, vec![(x * 5 + y) as f32]);
+                assert_eq!(*value.first().unwrap(), (x * 5 + y) as f32);
             }
-        }
-
-        // Read into an existing array with an offset
-        for x in 0..dims[0] {
-            for y in 0..dims[1] {
-                let mut r = vec![f32::NAN; 9];
-                read.read_into(
-                    &mut r,
-                    &[x..x + 1, y..y + 1],
-                    &[1, 1],
-                    &[3, 3],
-                    Some(0),
-                    Some(0),
-                )?;
-                let expected = vec![
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    (x * 5 + y) as f32,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                    f32::NAN,
-                ];
-                assert_eq_with_nan(&r, &expected, 0.001);
-            }
-        }
-
-        // 2x in fast dimension
-        for x in 0..dims[0] {
-            for y in 0..dims[1] - 1 {
-                let value = read.read::<f32>(&[x..x + 1, y..y + 2], Some(0), Some(0))?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, (x * 5 + y + 1) as f32]);
-            }
-        }
-
-        // 2x in slow dimension
-        for x in 0..dims[0] - 1 {
-            for y in 0..dims[1] {
-                let value = read.read::<f32>(&[x..x + 2, y..y + 1], Some(0), Some(0))?;
-                assert_eq!(value, vec![(x * 5 + y) as f32, ((x + 1) * 5 + y) as f32]);
-            }
-        }
-
-        // 2x2
-        for x in 0..dims[0] - 1 {
-            for y in 0..dims[1] - 1 {
-                let value = read.read::<f32>(&[x..x + 2, y..y + 2], Some(0), Some(0))?;
-                assert_eq!(
-                    value,
-                    vec![
-                        (x * 5 + y) as f32,
-                        (x * 5 + y + 1) as f32,
-                        ((x + 1) * 5 + y) as f32,
-                        ((x + 1) * 5 + y + 1) as f32,
-                    ]
-                );
-            }
-        }
-
-        // 3x3
-        for x in 0..dims[0] - 2 {
-            for y in 0..dims[1] - 2 {
-                let value = read.read::<f32>(&[x..x + 3, y..y + 3], Some(0), Some(0))?;
-                assert_eq!(
-                    value,
-                    vec![
-                        (x * 5 + y) as f32,
-                        (x * 5 + y + 1) as f32,
-                        (x * 5 + y + 2) as f32,
-                        ((x + 1) * 5 + y) as f32,
-                        ((x + 1) * 5 + y + 1) as f32,
-                        ((x + 1) * 5 + y + 2) as f32,
-                        ((x + 2) * 5 + y) as f32,
-                        ((x + 2) * 5 + y + 1) as f32,
-                        ((x + 2) * 5 + y + 2) as f32,
-                    ]
-                );
-            }
-        }
-
-        // 1x5
-        for x in 0..dims[1] {
-            let value = read.read::<f32>(&[x..x + 1, 0..5], Some(0), Some(0))?;
-            let expected = vec![
-                (x * 5) as f32,
-                (x * 5 + 1) as f32,
-                (x * 5 + 2) as f32,
-                (x * 5 + 3) as f32,
-                (x * 5 + 4) as f32,
-            ];
-            assert_eq!(value, expected);
-        }
-
-        // 5x1
-        for x in 0..dims[0] {
-            let value = read.read::<f32>(&[0..5, x..x + 1], Some(0), Some(0))?;
-            let expected = vec![
-                x as f32,
-                (x + 5) as f32,
-                (x + 10) as f32,
-                (x + 15) as f32,
-                (x + 20) as f32,
-            ];
-            assert_eq!(value, expected);
         }
     }
 
@@ -879,20 +831,22 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
     let file = "test_nan.om";
     remove_file_if_exists(file);
 
-    let data: Vec<f32> = (0..(5 * 5)).map(|_| f32::NAN).collect();
+    let shape: Vec<u64> = vec![5, 5];
+    let chunks: Vec<u64> = vec![5, 5];
+    let data = ArrayD::from_elem(copy_vec_u64_to_vec_usize(&shape), f32::NAN);
 
     {
         let file_handle = File::create(file)?;
         let mut file_writer = OmFileWriter::new(&file_handle, 8);
         let mut writer = file_writer.prepare_array::<f32>(
-            vec![5, 5],
-            vec![5, 5],
+            shape,
+            chunks,
             CompressionType::PforDelta2dInt16,
             1.0,
             0.0,
         )?;
 
-        writer.write_data(&data, None, None, None)?;
+        writer.write_data(&data, None, None)?;
         let variable_meta = writer.finalize();
         let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
@@ -913,22 +867,29 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn assert_eq_with_accuracy(expected: &[f32], actual: &[f32], accuracy: f32) {
-    assert_eq!(expected.len(), actual.len());
-    for (e, a) in expected.iter().zip(actual.iter()) {
-        assert!((e - a).abs() < accuracy, "Expected: {}, Actual: {}", e, a);
-    }
+fn copy_vec_u64_to_vec_usize(input: &Vec<u64>) -> Vec<usize> {
+    input.iter().map(|&x| x as usize).collect()
 }
 
-// Helper function to assert equality with NaN handling and a specified accuracy
-fn assert_eq_with_nan(actual: &[f32], expected: &[f32], accuracy: f32) {
-    assert_eq!(actual.len(), expected.len(), "Lengths differ");
-    for (a, e) in actual.iter().zip(expected.iter()) {
+fn nd_assert_eq_with_nan(
+    expected: &ArrayBase<OwnedRepr<f32>, Dim<IxDynImpl>>,
+    actual: &ArrayBase<OwnedRepr<f32>, Dim<IxDynImpl>>,
+) {
+    nd_assert_eq_with_accuracy_and_nan(expected.view(), actual.view(), f32::EPSILON);
+}
+
+fn nd_assert_eq_with_accuracy_and_nan(
+    expected: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
+    actual: ArrayBase<ViewRepr<&f32>, Dim<IxDynImpl>>,
+    accuracy: f32,
+) {
+    assert_eq!(expected.shape(), actual.shape());
+    for (e, a) in expected.iter().zip(actual.iter()) {
         if e.is_nan() {
             assert!(a.is_nan(), "Expected NaN, found {}", a);
         } else {
             assert!(
-                (a - e).abs() <= accuracy,
+                (e - a).abs() < accuracy,
                 "Values differ: expected {}, found {}",
                 e,
                 a

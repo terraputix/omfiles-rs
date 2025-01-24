@@ -1,9 +1,12 @@
+#![allow(non_snake_case)]
 use crate::backend::backends::OmFileReaderBackend;
 use crate::backend::mmapfile::{MmapFile, Mode};
 use crate::core::c_defaults::{c_error_string, create_uninit_decoder};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
 use crate::errors::OmFilesRsError;
+use ndarray::ArrayD;
+use num_traits::Zero;
 use om_file_format_sys::{
     om_decoder_init, om_decoder_read_buffer_size, om_header_size, om_header_type, om_trailer_read,
     om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
@@ -21,8 +24,6 @@ use std::sync::Arc;
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
     /// The backend that provides data via the get_bytes method
     pub backend: Arc<Backend>,
-    /// Holds the data of the header, is not supposed to go out of scope
-    // pub header_data: Vec<u8>,
     /// Holds the data where the meta information of the variable is stored, is not supposed to go out of scope
     /// Here the LUT and additional attributes of the variable need to be stored.
     pub variable_data: Vec<u8>,
@@ -188,7 +189,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     /// Read a variable as an array of a dynamic data type.
     pub fn read_into<T: OmFileArrayDataType>(
         &self,
-        into: &mut [T],
+        into: &mut ArrayD<T>,
         dim_read: &[Range<u64>],
         into_cube_offset: &[u64],
         into_cube_dimension: &[u64],
@@ -206,8 +207,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let n_dimensions = dim_read.len();
 
         // Validate dimension counts
-        assert_eq!(into_cube_offset.len(), n_dimensions);
-        assert_eq!(into_cube_dimension.len(), n_dimensions);
+        if n_dimensions != into_cube_offset.len() || n_dimensions != into_cube_dimension.len() {
+            return Err(OmFilesRsError::MismatchingCubeDimensionLength);
+        }
 
         // Prepare read parameters
         let read_offset: Vec<u64> = dim_read.iter().map(|r| r.start).collect();
@@ -245,19 +247,16 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         Ok(())
     }
 
-    pub fn read<T: OmFileArrayDataType>(
+    pub fn read<T: OmFileArrayDataType + Clone + Zero>(
         &self,
         dim_read: &[Range<u64>],
         io_size_max: Option<u64>,
         io_size_merge: Option<u64>,
-    ) -> Result<Vec<T>, OmFilesRsError> {
+    ) -> Result<ArrayD<T>, OmFilesRsError> {
         let out_dims: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
-        let n = out_dims.iter().product::<u64>() as usize;
-        let mut out = Vec::with_capacity(n as usize);
+        let out_dims_usize = out_dims.iter().map(|&x| x as usize).collect::<Vec<_>>();
 
-        unsafe {
-            out.set_len(n as usize);
-        }
+        let mut out = ArrayD::<T>::zeros(out_dims_usize);
 
         self.read_into::<T>(
             &mut out,

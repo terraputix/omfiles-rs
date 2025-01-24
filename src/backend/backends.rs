@@ -2,6 +2,7 @@ use crate::backend::mmapfile::{MAdvice, MmapFile, MmapType};
 use crate::core::c_defaults::{c_error_string, new_data_read, new_index_read};
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
+use ndarray::ArrayD;
 use om_file_format_sys::{
     om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
     OmError_t_ERROR_OK,
@@ -59,9 +60,14 @@ pub trait OmFileReaderBackend {
     fn decode<OmType: OmFileArrayDataType>(
         &self,
         decoder: &OmDecoder_t,
-        into: &mut [OmType],
+        into: &mut ArrayD<OmType>,
         chunk_buffer: &mut [u8],
     ) -> Result<(), OmFilesRsError> {
+        #[allow(unused_mut)]
+        let mut into = into
+            .as_slice_mut()
+            .ok_or(OmFilesRsError::ArrayNotContiguous)?;
+
         let mut index_read = new_index_read(decoder);
         unsafe {
             // Loop over index blocks and read index data
@@ -106,12 +112,12 @@ pub trait OmFileReaderBackend {
                         &mut error,
                     ) {
                         let error_string = c_error_string(error);
-                        panic!("OmDecoder: {:}", &error_string);
+                        return Err(OmFilesRsError::DecoderError(error_string));
                     }
                 }
                 if error != OmError_t_ERROR_OK {
                     let error_string = c_error_string(error);
-                    panic!("OmDecoder: {:}", &error_string);
+                    return Err(OmFilesRsError::DecoderError(error_string));
                 }
             }
         }
