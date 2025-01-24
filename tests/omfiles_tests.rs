@@ -833,7 +833,7 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
 
     let shape: Vec<u64> = vec![5, 5];
     let chunks: Vec<u64> = vec![5, 5];
-    let data = ArrayD::from_shape_simple_fn(copy_vec_u64_to_vec_usize(&shape), || f32::NAN);
+    let data = ArrayD::from_elem(copy_vec_u64_to_vec_usize(&shape), f32::NAN);
 
     {
         let file_handle = File::create(file)?;
