@@ -8,10 +8,10 @@ use ndarray::ArrayD;
 use om_file_format_sys::{
     om_encoder_chunk_buffer_size, om_encoder_compress_chunk, om_encoder_compress_lut,
     om_encoder_compressed_chunk_buffer_size, om_encoder_count_chunks,
-    om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, om_header_write,
-    om_header_write_size, om_trailer_size, om_trailer_write, om_variable_write_numeric_array,
-    om_variable_write_numeric_array_size, om_variable_write_scalar, om_variable_write_scalar_size,
-    OmEncoder_t, OmError_t_ERROR_OK,
+    om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, om_error_string,
+    om_header_write, om_header_write_size, om_trailer_size, om_trailer_write,
+    om_variable_write_numeric_array, om_variable_write_numeric_array_size,
+    om_variable_write_scalar, om_variable_write_scalar_size, OmEncoder_t, OmError_t_ERROR_OK,
 };
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
@@ -103,7 +103,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriter<Backend> {
     ) -> Result<OmFileWriterArray<T, Backend>, OmFilesRsError> {
         let _ = &self.write_header_if_required()?;
 
-        Ok(OmFileWriterArray::new(
+        let array_writer = OmFileWriterArray::new(
             dimensions,
             chunk_dimensions,
             compression,
@@ -111,7 +111,9 @@ impl<Backend: OmFileWriterBackend> OmFileWriter<Backend> {
             scale_factor,
             add_offset,
             self.buffer.borrow_mut(),
-        ))
+        )?;
+
+        Ok(array_writer)
     }
 
     pub fn write_array(
@@ -210,9 +212,13 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         scale_factor: f32,
         add_offset: f32,
         buffer: &'a mut OmBufferedWriter<Backend>,
-    ) -> Self {
-        assert_eq!(OmType::DATA_TYPE_ARRAY, data_type, "Data type mismatch");
-        assert_eq!(dimensions.len(), chunk_dimensions.len());
+    ) -> Result<Self, OmFilesRsError> {
+        if data_type != OmType::DATA_TYPE_ARRAY {
+            return Err(OmFilesRsError::InvalidDataType);
+        }
+        if dimensions.len() != chunk_dimensions.len() {
+            return Err(OmFilesRsError::MismatchingCubeDimensionLength);
+        }
 
         let chunks = chunk_dimensions;
 
@@ -229,7 +235,16 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
                 dimensions.len() as u64,
             )
         };
-        assert_eq!(error, OmError_t_ERROR_OK, "OmEncoder_init failed");
+        if error != OmError_t_ERROR_OK {
+            return Err(OmFilesRsError::FileWriterError {
+                errno: error as i32,
+                error: unsafe {
+                    std::ffi::CStr::from_ptr(om_error_string(error))
+                        .to_string_lossy()
+                        .into_owned()
+                },
+            });
+        }
 
         let n_chunks = unsafe { om_encoder_count_chunks(&encoder) } as usize;
         let compressed_chunk_buffer_size =
@@ -239,7 +254,7 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
         let chunk_buffer = vec![0u8; chunk_buffer_size];
         let look_up_table = vec![0u64; n_chunks + 1];
 
-        Self {
+        Ok(Self {
             look_up_table,
             encoder,
             chunk_index: 0,
@@ -252,7 +267,7 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
             compressed_chunk_buffer_size,
             chunk_buffer,
             buffer,
-        }
+        })
     }
 
     pub fn write_data(
