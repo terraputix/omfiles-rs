@@ -556,6 +556,146 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
+    let file = "test_hierarchical.om";
+    remove_file_if_exists(file);
+
+    {
+        let file_handle = File::create(file)?;
+        let mut file_writer = OmFileWriter::new(&file_handle, 8);
+
+        // Create a parent array
+        let parent_dims = vec![3, 3];
+        let parent_chunks = vec![2, 2];
+        let parent_data = ArrayD::from_shape_vec(
+            copy_vec_u64_to_vec_usize(&parent_dims),
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        )
+        .unwrap();
+
+        // Create sub-child array first (will be child of child1)
+        let subchild_dims = vec![2, 2];
+        let subchild_chunks = vec![2, 2];
+        let subchild_data = ArrayD::from_shape_vec(
+            copy_vec_u64_to_vec_usize(&subchild_dims),
+            vec![30.0, 31.0, 32.0, 33.0],
+        )
+        .unwrap();
+
+        let mut subchild_writer = file_writer.prepare_array::<f32>(
+            subchild_dims.clone(),
+            subchild_chunks.clone(),
+            CompressionType::PforDelta2dInt16,
+            1.0,
+            0.0,
+        )?;
+        subchild_writer.write_data(subchild_data.view(), None, None)?;
+        let subchild_meta = subchild_writer.finalize();
+        let subchild_var = file_writer.write_array(subchild_meta, "subchild", &[])?;
+
+        // Create child arrays
+        let child_dims = vec![2, 2];
+        let child_chunks = vec![2, 2];
+        let child1_data = ArrayD::from_shape_vec(
+            copy_vec_u64_to_vec_usize(&child_dims),
+            vec![10.0, 11.0, 12.0, 13.0],
+        )
+        .unwrap();
+        let child2_data = ArrayD::from_shape_vec(
+            copy_vec_u64_to_vec_usize(&child_dims),
+            vec![20.0, 21.0, 22.0, 23.0],
+        )
+        .unwrap();
+
+        // Write child arrays (child1 with subchild)
+        let mut child1_writer = file_writer.prepare_array::<f32>(
+            child_dims.clone(),
+            child_chunks.clone(),
+            CompressionType::PforDelta2dInt16,
+            1.0,
+            0.0,
+        )?;
+        child1_writer.write_data(child1_data.view(), None, None)?;
+        let child1_meta = child1_writer.finalize();
+        let child1_var = file_writer.write_array(child1_meta, "child1", &[subchild_var])?;
+
+        let mut child2_writer = file_writer.prepare_array::<f32>(
+            child_dims.clone(),
+            child_chunks.clone(),
+            CompressionType::PforDelta2dInt16,
+            1.0,
+            0.0,
+        )?;
+        child2_writer.write_data(child2_data.view(), None, None)?;
+        let child2_meta = child2_writer.finalize();
+        let child2_var = file_writer.write_array(child2_meta, "child2", &[])?;
+
+        // Write parent array with children
+        let mut parent_writer = file_writer.prepare_array::<f32>(
+            parent_dims,
+            parent_chunks,
+            CompressionType::PforDelta2dInt16,
+            1.0,
+            0.0,
+        )?;
+        parent_writer.write_data(parent_data.view(), None, None)?;
+        let parent_meta = parent_writer.finalize();
+        let parent_var =
+            file_writer.write_array(parent_meta, "parent", &[child1_var, child2_var])?;
+
+        file_writer.write_trailer(parent_var)?;
+    }
+
+    {
+        // Verify the hierarchical structure
+        let file_for_reading = File::open(file)?;
+        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+        let reader = OmFileReader::new(Arc::new(read_backend))?;
+
+        // Check parent data
+        let parent = reader.read::<f32>(&[0..3, 0..3], None, None)?;
+        let expected_parent = ArrayD::from_shape_vec(
+            vec![3, 3],
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        )
+        .unwrap();
+        assert_eq!(parent, expected_parent);
+
+        // Check number of children at root level
+        assert_eq!(reader.number_of_children(), 2);
+
+        // Check child1 data and its subchild
+        let child1 = reader.get_child(0).unwrap();
+        assert_eq!(child1.get_name().unwrap(), "child1");
+        let child1_data = child1.read::<f32>(&[0..2, 0..2], None, None)?;
+        let expected_child1 =
+            ArrayD::from_shape_vec(vec![2, 2], vec![10.0, 11.0, 12.0, 13.0]).unwrap();
+        assert_eq!(child1_data, expected_child1);
+
+        // Check child1's subchild
+        assert_eq!(child1.number_of_children(), 1);
+        let subchild = child1.get_child(0).unwrap();
+        assert_eq!(subchild.get_name().unwrap(), "subchild");
+        let subchild_data = subchild.read::<f32>(&[0..2, 0..2], None, None)?;
+        let expected_subchild =
+            ArrayD::from_shape_vec(vec![2, 2], vec![30.0, 31.0, 32.0, 33.0]).unwrap();
+        assert_eq!(subchild_data, expected_subchild);
+
+        // Check child2 data (no children)
+        let child2 = reader.get_child(1).unwrap();
+        assert_eq!(child2.get_name().unwrap(), "child2");
+        assert_eq!(child2.number_of_children(), 0);
+        let child2_data = child2.read::<f32>(&[0..2, 0..2], None, None)?;
+        let expected_child2 =
+            ArrayD::from_shape_vec(vec![2, 2], vec![20.0, 21.0, 22.0, 23.0]).unwrap();
+        assert_eq!(child2_data, expected_child2);
+    }
+
+    remove_file_if_exists(file);
+    Ok(())
+}
+
+#[test]
 fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
     let file = "test_write_v3.om";
     remove_file_if_exists(file);
