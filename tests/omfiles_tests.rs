@@ -7,11 +7,15 @@ use omfiles_rs::{
     },
     core::compression::CompressionType,
     errors::OmFilesRsError,
-    io::{reader::OmFileReader, writer::OmFileWriter},
+    io::{
+        reader::{OffsetSize, OmFileReader},
+        writer::OmFileWriter,
+    },
 };
 
 use std::{
     borrow::BorrowMut,
+    collections::HashMap,
     f32::{self},
     fs::{self, File},
     sync::Arc,
@@ -651,6 +655,43 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
         let file_for_reading = File::open(file)?;
         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
         let reader = OmFileReader::new(Arc::new(read_backend))?;
+
+        let all_children_meta = reader.get_flat_variable_metadata();
+        let expected_metadata = [
+            (
+                "parent",
+                OffsetSize {
+                    offset: 304,
+                    size: 110,
+                },
+            ),
+            (
+                "child1",
+                OffsetSize {
+                    offset: 104,
+                    size: 94,
+                },
+            ),
+            (
+                "subchild",
+                OffsetSize {
+                    offset: 16,
+                    size: 80,
+                },
+            ),
+            (
+                "child2",
+                OffsetSize {
+                    offset: 208,
+                    size: 78,
+                },
+            ),
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect::<HashMap<String, OffsetSize>>();
+
+        assert_eq!(all_children_meta, expected_metadata);
 
         // Check parent data
         let parent = reader.read::<f32>(&[0..3, 0..3], None, None)?;

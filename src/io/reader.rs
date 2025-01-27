@@ -16,12 +16,14 @@ use om_file_format_sys::{
     OmHeaderType_t_OM_HEADER_INVALID, OmHeaderType_t_OM_HEADER_LEGACY,
     OmHeaderType_t_OM_HEADER_READ_TRAILER, OmVariable_t,
 };
+use std::collections::HashMap;
 use std::fs::File;
 use std::ops::Range;
 use std::os::raw::c_void;
 use std::sync::Arc;
 
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
+    offset_size: Option<OffsetSize>,
     /// The backend that provides data via the get_bytes method
     pub backend: Arc<Backend>,
     /// Holds the data where the meta information of the variable is stored, is not supposed to go out of scope
@@ -35,7 +37,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     #[allow(non_upper_case_globals)]
     pub fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() } as u64;
-        let owned_data = backend.get_bytes_owned(0, header_size);
+        let owned_data: Result<Vec<u8>, OmFilesRsError> = backend.get_bytes_owned(0, header_size);
         let header_data = match owned_data {
             Ok(data) => data,
             Err(error) => backend
@@ -45,9 +47,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
         let header_type = unsafe { om_header_type(header_data.as_ptr() as *const c_void) };
 
-        let variable_data = {
+        let variable_and_offset = {
             match header_type {
-                OmHeaderType_t_OM_HEADER_LEGACY => header_data,
+                OmHeaderType_t_OM_HEADER_LEGACY => Ok((header_data, None)),
                 OmHeaderType_t_OM_HEADER_READ_TRAILER => unsafe {
                     let file_size = backend.count();
                     let trailer_size = om_trailer_size();
@@ -69,6 +71,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                         return Err(OmFilesRsError::NotAnOmFile);
                     }
 
+                    let offset_size = OffsetSize { offset, size };
+
                     let owned_data = backend.get_bytes_owned(offset, size);
                     let variable_data = match owned_data {
                         Ok(data) => data,
@@ -76,7 +80,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                             .forward_unimplemented_error(error, || backend.get_bytes(offset, size))?
                             .to_vec(),
                     };
-                    variable_data
+                    Ok((variable_data, Some(offset_size)))
                 },
                 OmHeaderType_t_OM_HEADER_INVALID => {
                     return Err(OmFilesRsError::NotAnOmFile);
@@ -85,8 +89,11 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             }
         };
 
+        let (variable_data, offset_size) = variable_and_offset?;
+
         let variable_ptr = unsafe { om_variable_init(variable_data.as_ptr() as *const c_void) };
         Ok(Self {
+            offset_size,
             backend,
             variable_data,
             variable: variable_ptr,
@@ -140,6 +147,38 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         }
     }
 
+    /// Returns a HashMap mapping variable names to their offset and size
+    pub fn get_flat_variable_metadata(&self) -> HashMap<String, OffsetSize> {
+        let mut result = HashMap::new();
+        self.collect_variable_metadata(Vec::new(), &mut result);
+        result
+    }
+
+    /// Helper function that recursively collects variable metadata
+    fn collect_variable_metadata(
+        &self,
+        current_path: Vec<u32>,
+        result: &mut HashMap<String, OffsetSize>,
+    ) {
+        // Add current variable's metadata if it has a name (skip root if unnamed)
+        if let Some(name) = self.get_name() {
+            if let Some(offset_size) = &self.offset_size {
+                result.insert(name.to_string(), offset_size.clone());
+            }
+        }
+
+        // Process children
+        let num_children = self.number_of_children();
+        for i in 0..num_children {
+            let mut path = current_path.clone();
+            path.push(i);
+
+            if let Some(child) = self.get_child(i) {
+                child.collect_variable_metadata(path, result);
+            }
+        }
+    }
+
     pub fn number_of_children(&self) -> u32 {
         unsafe { om_variable_get_children_count(self.variable) }
     }
@@ -151,20 +190,36 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             return None;
         }
 
-        let owned_data = self.backend.get_bytes_owned(offset, size);
+        let offset_size = OffsetSize { offset, size };
+
+        let child = self
+            .init_child_from_offset_size(offset_size)
+            .expect("Failed to init child");
+        Some(child)
+    }
+
+    pub fn init_child_from_offset_size(
+        &self,
+        offset_size: OffsetSize,
+    ) -> Result<Self, OmFilesRsError> {
+        let owned_data: Result<Vec<u8>, OmFilesRsError> = self
+            .backend
+            .get_bytes_owned(offset_size.offset, offset_size.size);
         let child_variable = match owned_data {
             Ok(data) => data,
-            Err(error) => self
-                .backend
-                .forward_unimplemented_error(error, || self.backend.get_bytes(offset, size))
-                .expect("Failed to read child data.")
-                .to_vec(),
+            Err(error) => {
+                let fallback_result = self.backend.forward_unimplemented_error(error, || {
+                    self.backend.get_bytes(offset_size.offset, offset_size.size)
+                })?;
+                fallback_result.to_vec()
+            }
         };
 
         let child_variable_ptr =
             unsafe { om_variable_init(child_variable.as_ptr() as *const c_void) };
 
-        Some(Self {
+        Ok(Self {
+            offset_size: Some(offset_size),
             backend: self.backend.clone(),
             variable_data: child_variable,
             variable: child_variable_ptr,
@@ -294,4 +349,10 @@ impl OmFileReader<MmapFile> {
     pub fn was_deleted(&self) -> bool {
         self.backend.was_deleted()
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OffsetSize {
+    pub offset: u64,
+    pub size: u64,
 }
