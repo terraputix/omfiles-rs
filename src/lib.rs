@@ -12,8 +12,6 @@ pub mod core {
     pub mod c_defaults;
     pub mod compression;
     pub mod data_types;
-    pub mod dimensions;
-    pub mod header;
 }
 
 pub mod backend {

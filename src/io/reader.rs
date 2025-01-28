@@ -204,10 +204,15 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             return Err(OmFilesRsError::InvalidDataType);
         }
 
-        let n_dimensions = dim_read.len();
+        let n_dimensions_read = dim_read.len();
+        // TODO: Maybe cache this in the reader struct
+        let n_dims = self.get_dimensions().len();
 
         // Validate dimension counts
-        if n_dimensions != into_cube_offset.len() || n_dimensions != into_cube_dimension.len() {
+        if n_dims != n_dimensions_read
+            || n_dimensions_read != into_cube_offset.len()
+            || n_dimensions_read != into_cube_dimension.len()
+        {
             return Err(OmFilesRsError::MismatchingCubeDimensionLength);
         }
 
@@ -221,7 +226,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             om_decoder_init(
                 &mut decoder,
                 self.variable,
-                n_dimensions as u64,
+                n_dimensions_read as u64,
                 read_offset.as_ptr(),
                 read_count.as_ptr(),
                 into_cube_offset.as_ptr(),
