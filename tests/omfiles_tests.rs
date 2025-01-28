@@ -8,8 +8,8 @@ use omfiles_rs::{
     core::compression::CompressionType,
     errors::OmFilesRsError,
     io::{
-        reader::{OffsetSize, OmFileReader},
-        writer::OmFileWriter,
+        reader::OmFileReader,
+        writer::{OmFileWriter, OmOffsetSize},
     },
 };
 
@@ -658,38 +658,14 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
 
         let all_children_meta = reader.get_flat_variable_metadata();
         let expected_metadata = [
-            (
-                "parent",
-                OffsetSize {
-                    offset: 304,
-                    size: 110,
-                },
-            ),
-            (
-                "child1",
-                OffsetSize {
-                    offset: 104,
-                    size: 94,
-                },
-            ),
-            (
-                "subchild",
-                OffsetSize {
-                    offset: 16,
-                    size: 80,
-                },
-            ),
-            (
-                "child2",
-                OffsetSize {
-                    offset: 208,
-                    size: 78,
-                },
-            ),
+            ("parent", OmOffsetSize::new(304, 110)),
+            ("child1", OmOffsetSize::new(104, 94)),
+            ("subchild", OmOffsetSize::new(16, 80)),
+            ("child2", OmOffsetSize::new(208, 78)),
         ]
         .iter()
         .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect::<HashMap<String, OffsetSize>>();
+        .collect::<HashMap<String, OmOffsetSize>>();
 
         assert_eq!(all_children_meta, expected_metadata);
 

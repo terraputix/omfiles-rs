@@ -22,8 +22,10 @@ use std::ops::Range;
 use std::os::raw::c_void;
 use std::sync::Arc;
 
+use super::writer::OmOffsetSize;
+
 pub struct OmFileReader<Backend: OmFileReaderBackend> {
-    offset_size: Option<OffsetSize>,
+    offset_size: Option<OmOffsetSize>,
     /// The backend that provides data via the get_bytes method
     pub backend: Arc<Backend>,
     /// Holds the data where the meta information of the variable is stored, is not supposed to go out of scope
@@ -71,7 +73,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                         return Err(OmFilesRsError::NotAnOmFile);
                     }
 
-                    let offset_size = OffsetSize { offset, size };
+                    let offset_size = OmOffsetSize::new(offset, size);
 
                     let owned_data = backend.get_bytes_owned(offset, size);
                     let variable_data = match owned_data {
@@ -148,7 +150,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     }
 
     /// Returns a HashMap mapping variable names to their offset and size
-    pub fn get_flat_variable_metadata(&self) -> HashMap<String, OffsetSize> {
+    pub fn get_flat_variable_metadata(&self) -> HashMap<String, OmOffsetSize> {
         let mut result = HashMap::new();
         self.collect_variable_metadata(Vec::new(), &mut result);
         result
@@ -158,7 +160,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     fn collect_variable_metadata(
         &self,
         current_path: Vec<u32>,
-        result: &mut HashMap<String, OffsetSize>,
+        result: &mut HashMap<String, OmOffsetSize>,
     ) {
         // Add current variable's metadata if it has a name (skip root if unnamed)
         if let Some(name) = self.get_name() {
@@ -190,8 +192,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             return None;
         }
 
-        let offset_size = OffsetSize { offset, size };
-
+        let offset_size = OmOffsetSize::new(offset, size);
         let child = self
             .init_child_from_offset_size(offset_size)
             .expect("Failed to init child");
@@ -200,7 +201,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
     pub fn init_child_from_offset_size(
         &self,
-        offset_size: OffsetSize,
+        offset_size: OmOffsetSize,
     ) -> Result<Self, OmFilesRsError> {
         let owned_data: Result<Vec<u8>, OmFilesRsError> = self
             .backend
@@ -349,10 +350,4 @@ impl OmFileReader<MmapFile> {
     pub fn was_deleted(&self) -> bool {
         self.backend.was_deleted()
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct OffsetSize {
-    pub offset: u64,
-    pub size: u64,
 }
