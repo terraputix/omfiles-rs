@@ -52,7 +52,7 @@ impl<Backend: OmFileWriterBackend> OmBufferedWriter<Backend> {
 
     /// How many bytes are left in the write buffer
     pub fn remaining_capacity(&self) -> usize {
-        self.buffer.capacity() - self.write_position
+        self.buffer.len() - self.write_position
     }
 
     /// Get a mutable slice to the current write position
@@ -73,7 +73,7 @@ impl<Backend: OmFileWriterBackend> OmBufferedWriter<Backend> {
 
         self.write_to_file()?;
 
-        if self.buffer.capacity() >= minimum_capacity {
+        if self.buffer.len() >= minimum_capacity {
             return Ok(());
         }
 

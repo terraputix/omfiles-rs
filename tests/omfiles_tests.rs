@@ -566,7 +566,7 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
 
     {
         let file_handle = File::create(file)?;
-        let mut file_writer = OmFileWriter::new(&file_handle, 4096);
+        let mut file_writer = OmFileWriter::new(&file_handle, 8);
 
         // Create a parent array
         let parent_dims = vec![3, 3];
@@ -720,7 +720,7 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(child2_data, expected_child2);
     }
 
-    // remove_file_if_exists(file);
+    remove_file_if_exists(file);
     Ok(())
 }
 
