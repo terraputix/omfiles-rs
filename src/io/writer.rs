@@ -17,9 +17,10 @@ use std::borrow::BorrowMut;
 use std::marker::PhantomData;
 use std::os::raw::c_void;
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct OmOffsetSize {
-    offset: u64,
-    size: u64,
+    pub offset: u64,
+    pub size: u64,
 }
 
 impl OmOffsetSize {
