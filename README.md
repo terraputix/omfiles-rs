@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/github/terraputix/omfiles-rs/graph/badge.svg?token=ZCOQN3ZKHP)](https://codecov.io/github/terraputix/omfiles-rs)
+
 # omfiles-rs
 
 Rust reader and writer implementation for the `om` file format.
