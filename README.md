@@ -1,6 +1,8 @@
-[![codecov](https://codecov.io/github/terraputix/omfiles-rs/graph/badge.svg?token=ZCOQN3ZKHP)](https://codecov.io/github/terraputix/omfiles-rs)
-
 # omfiles-rs
+
+[![codecov](https://codecov.io/github/terraputix/omfiles-rs/graph/badge.svg?token=ZCOQN3ZKHP)](https://codecov.io/github/terraputix/omfiles-rs)
+[![Test](https://github.com/terraputix/omfiles-rs/actions/workflows/tests.yml/badge.svg)](https://github.com/terraputix/omfiles-rs/actions/workflows/tests.yml)
+[![GitHub license](https://img.shields.io/github/license/terraputix/omfiles-rs)](https://github.com/terraputix/omfiles-rs/blob/main/LICENSE)
 
 Rust reader and writer implementation for the `om` file format.
 
