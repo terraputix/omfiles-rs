@@ -150,6 +150,10 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     }
 
     /// Returns a HashMap mapping variable names to their offset and size
+    /// This function needs to traverse the entire variable tree, therefore
+    /// it is best to make sure that variable metadata is close to each other
+    /// at the end of the file (before the trailer). The caller could then
+    /// make sure that this part of the file is loaded/cached in memory
     pub fn get_flat_variable_metadata(&self) -> HashMap<String, OmOffsetSize> {
         let mut result = HashMap::new();
         self.collect_variable_metadata(Vec::new(), &mut result);
@@ -162,7 +166,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         current_path: Vec<u32>,
         result: &mut HashMap<String, OmOffsetSize>,
     ) {
-        // Add current variable's metadata if it has a name (skip root if unnamed)
+        // Add current variable's metadata if it has a name and offset_size
+        // TODO: This requires to not repeat in this flattened hashmap
         if let Some(name) = self.get_name() {
             if let Some(offset_size) = &self.offset_size {
                 result.insert(name.to_string(), offset_size.clone());
