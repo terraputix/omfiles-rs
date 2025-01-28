@@ -4,6 +4,9 @@ description: "Cache Cargo registry and build"
 runs:
   using: "composite"
   steps:
+    - name: Install Rust
+      run: rustup update stable
+      shell: bash
     - name: Cache Cargo registry
       uses: actions/cache@v3
       with:
