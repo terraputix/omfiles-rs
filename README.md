@@ -1,5 +1,9 @@
 # omfiles-rs
 
+[![codecov](https://codecov.io/github/terraputix/omfiles-rs/graph/badge.svg?token=ZCOQN3ZKHP)](https://codecov.io/github/terraputix/omfiles-rs)
+[![Test](https://github.com/terraputix/omfiles-rs/actions/workflows/tests.yml/badge.svg)](https://github.com/terraputix/omfiles-rs/actions/workflows/tests.yml)
+[![GitHub license](https://img.shields.io/github/license/terraputix/omfiles-rs)](https://github.com/terraputix/omfiles-rs/blob/main/LICENSE)
+
 Rust reader and writer implementation for the `om` file format.
 
 The file format is documented in the [open-meteo/om-file-format](https://github.com/open-meteo/om-file-format/blob/main/README.md) repository.
