@@ -36,7 +36,9 @@ fn write_om_file(file: &str, data: &[f32]) {
 
     writer.write_data_flat(data, None, None, None).unwrap();
     let variable_meta = writer.finalize();
-    let variable = file_writer.write_array(variable_meta, "data", &[]).unwrap();
+    let variable = file_writer
+        .write_array(&variable_meta, "data", &[])
+        .unwrap();
     file_writer.write_trailer(variable).unwrap();
 }
 
@@ -65,7 +67,9 @@ pub fn benchmark_in_memory(c: &mut Criterion) {
 
                 black_box(writer.write_data_flat(&data, None, None, None).unwrap());
                 let variable_meta = writer.finalize();
-                let variable = file_writer.write_array(variable_meta, "data", &[]).unwrap();
+                let variable = file_writer
+                    .write_array(&variable_meta, "data", &[])
+                    .unwrap();
                 black_box(file_writer.write_trailer(variable).unwrap());
             }
             timer.stop();

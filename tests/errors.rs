@@ -97,7 +97,7 @@ fn test_mismatching_cube_dimension_length_for_read() {
         array_writer.write_data(array.view(), None, None).unwrap();
 
         let variable_meta = array_writer.finalize();
-        let variable = writer.write_array(variable_meta, "data", &[]).unwrap();
+        let variable = writer.write_array(&variable_meta, "data", &[]).unwrap();
         writer.write_trailer(variable).unwrap();
     }
 

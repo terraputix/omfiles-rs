@@ -77,7 +77,7 @@ fn main() -> io::Result<()> {
     println!("Finalized Array");
 
     let variable = file_writer
-        .write_array(variable_meta, "data", &[])
+        .write_array(&variable_meta, "data", &[])
         .expect("Failed to write array metadata");
     file_writer
         .write_trailer(variable)
