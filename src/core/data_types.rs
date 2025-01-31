@@ -32,6 +32,24 @@ impl DataType {
     pub fn to_c(&self) -> OmDataType_t {
         *self as OmDataType_t
     }
+
+    pub fn is_scalar(&self) -> bool {
+        match self {
+            DataType::None
+            | DataType::Int8
+            | DataType::Uint8
+            | DataType::Int16
+            | DataType::Uint16
+            | DataType::Int32
+            | DataType::Uint32
+            | DataType::Int64
+            | DataType::Uint64
+            | DataType::Float
+            | DataType::Double
+            | DataType::String => true,
+            _ => false,
+        }
+    }
 }
 
 impl TryFrom<u8> for DataType {

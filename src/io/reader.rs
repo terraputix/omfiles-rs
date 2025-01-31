@@ -154,7 +154,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     /// it is best to make sure that variable metadata is close to each other
     /// at the end of the file (before the trailer). The caller could then
     /// make sure that this part of the file is loaded/cached in memory
-    pub fn get_flat_variable_metadata(&self) -> HashMap<String, OmOffsetSize> {
+    pub fn get_flat_variable_metadata(&self) -> HashMap<String, (OmOffsetSize, bool)> {
         let mut result = HashMap::new();
         self.collect_variable_metadata(Vec::new(), &mut result);
         result
@@ -164,13 +164,14 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     fn collect_variable_metadata(
         &self,
         current_path: Vec<u32>,
-        result: &mut HashMap<String, OmOffsetSize>,
+        result: &mut HashMap<String, (OmOffsetSize, bool)>,
     ) {
         // Add current variable's metadata if it has a name and offset_size
-        // TODO: This requires to not repeat in this flattened hashmap
+        // TODO: This requires for names to be unique
         if let Some(name) = self.get_name() {
             if let Some(offset_size) = &self.offset_size {
-                result.insert(name.to_string(), offset_size.clone());
+                let is_scalar = self.data_type().is_scalar();
+                result.insert(name.to_string(), (offset_size.clone(), is_scalar));
             }
         }
 
