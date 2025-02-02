@@ -669,11 +669,14 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
         let all_children_meta = reader.get_flat_variable_metadata();
         let expected_metadata = [
             ("parent", (OmOffsetSize::new(4224, 142), false)),
-            ("child1", (OmOffsetSize::new(4048, 94), false)),
-            ("subchild", (OmOffsetSize::new(3968, 80), false)),
-            ("int32", (OmOffsetSize::new(3920, 17), true)),
-            ("double", (OmOffsetSize::new(3944, 22), true)),
-            ("child2", (OmOffsetSize::new(4144, 78), false)),
+            ("parent/child1", (OmOffsetSize::new(4048, 94), false)),
+            (
+                "parent/child1/subchild",
+                (OmOffsetSize::new(3968, 80), false),
+            ),
+            ("parent/int32", (OmOffsetSize::new(3920, 17), true)),
+            ("parent/double", (OmOffsetSize::new(3944, 22), true)),
+            ("parent/child2", (OmOffsetSize::new(4144, 78), false)),
         ]
         .iter()
         .map(|(k, v)| (k.to_string(), v.clone()))

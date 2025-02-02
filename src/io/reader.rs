@@ -163,7 +163,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     /// Helper function that recursively collects variable metadata
     fn collect_variable_metadata(
         &self,
-        current_path: Vec<u32>,
+        mut current_path: Vec<String>,
         result: &mut HashMap<String, (OmOffsetSize, bool)>,
     ) {
         // Add current variable's metadata if it has a name and offset_size
@@ -171,18 +171,25 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         if let Some(name) = self.get_name() {
             if let Some(offset_size) = &self.offset_size {
                 let is_scalar = self.data_type().is_scalar();
-                result.insert(name.to_string(), (offset_size.clone(), is_scalar));
+
+                current_path.push(name.to_string());
+                // Create hierarchical key
+                let path_str = current_path
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join("/");
+
+                result.insert(path_str, (offset_size.clone(), is_scalar));
             }
         }
 
         // Process children
         let num_children = self.number_of_children();
         for i in 0..num_children {
-            let mut path = current_path.clone();
-            path.push(i);
-
+            let child_path = current_path.clone();
             if let Some(child) = self.get_child(i) {
-                child.collect_variable_metadata(path, result);
+                child.collect_variable_metadata(child_path, result);
             }
         }
     }
