@@ -1,3 +1,6 @@
+use core::slice;
+use std::mem;
+
 use om_file_format_sys::OmDataType_t;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -93,6 +96,39 @@ pub trait OmFileArrayDataType {
 /// Trait for types that can be stored as scalars in OmFiles
 pub trait OmFileScalarDataType: Default {
     const DATA_TYPE_SCALAR: DataType;
+
+    /// Creates a new instance from raw bytes
+    fn from_raw_bytes(bytes: &[u8]) -> Self {
+        assert!(
+            bytes.len() >= mem::size_of::<Self>(),
+            "Buffer too small to contain type of size {}",
+            mem::size_of::<Self>()
+        );
+
+        // Safety: This assumes the bytes represent a valid value of Self
+        // and that alignment requirements are met
+        unsafe {
+            let mut result = Self::default();
+            std::ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                &mut result as *mut Self as *mut u8,
+                mem::size_of::<Self>(),
+            );
+            result
+        }
+    }
+
+    /// Performs an operation with the raw bytes of this value
+    fn with_raw_bytes<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&[u8]) -> T,
+    {
+        // Safety: This creates a slice that references the bytes of self
+        let bytes = unsafe {
+            slice::from_raw_parts(self as *const Self as *const u8, mem::size_of::<Self>())
+        };
+        f(bytes)
+    }
 }
 
 // Implement both traits for all supported numeric types
@@ -164,4 +200,22 @@ impl OmFileArrayDataType for f64 {
 }
 impl OmFileScalarDataType for f64 {
     const DATA_TYPE_SCALAR: DataType = DataType::Double;
+}
+
+impl OmFileScalarDataType for String {
+    const DATA_TYPE_SCALAR: DataType = DataType::String;
+
+    fn from_raw_bytes(bytes: &[u8]) -> Self {
+        // Attempt to create a UTF-8 string from the bytes
+        // If bytes are not valid UTF-8, replace invalid sequences
+        String::from_utf8_lossy(bytes).into_owned()
+    }
+
+    fn with_raw_bytes<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&[u8]) -> T,
+    {
+        // Use the UTF-8 bytes of the string
+        f(self.as_bytes())
+    }
 }

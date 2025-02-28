@@ -65,32 +65,43 @@ impl<Backend: OmFileWriterBackend> OmFileWriter<Backend> {
         assert!(children.len() <= u32::MAX as usize);
 
         let type_scalar = T::DATA_TYPE_SCALAR.to_c();
-
-        let size = unsafe {
-            om_variable_write_scalar_size(name.len() as u16, children.len() as u32, type_scalar)
-        };
-
+        let children_offsets: Vec<u64> = children.iter().map(|c| c.offset).collect();
+        let children_sizes: Vec<u64> = children.iter().map(|c| c.size).collect();
+        // Align to 64 bytes before writing
         self.buffer.align_to_64_bytes()?;
         let offset = self.buffer.total_bytes_written as u64;
 
-        self.buffer.reallocate(size)?;
+        let size = value.with_raw_bytes(|bytes| -> Result<usize, OmFilesRsError> {
+            let size = unsafe {
+                om_variable_write_scalar_size(
+                    name.len() as u16,
+                    children.len() as u32,
+                    type_scalar,
+                    bytes.len() as u64,
+                )
+            };
 
-        let children_offsets: Vec<u64> = children.iter().map(|c| c.offset).collect();
-        let children_sizes: Vec<u64> = children.iter().map(|c| c.size).collect();
-        unsafe {
-            om_variable_write_scalar(
-                self.buffer.buffer_at_write_position().as_mut_ptr() as *mut c_void,
-                name.len() as u16,
-                children.len() as u32,
-                children_offsets.as_ptr(),
-                children_sizes.as_ptr(),
-                name.as_ptr() as *const ::std::os::raw::c_char,
-                type_scalar,
-                &value as *const T as *const c_void,
-            )
-        };
+            self.buffer.reallocate(size)?;
 
-        self.buffer.increment_write_position(size);
+            unsafe {
+                om_variable_write_scalar(
+                    self.buffer.buffer_at_write_position().as_mut_ptr() as *mut c_void,
+                    name.len() as u16,
+                    children.len() as u32,
+                    children_offsets.as_ptr(),
+                    children_sizes.as_ptr(),
+                    name.as_ptr() as *const ::std::os::raw::c_char,
+                    type_scalar,
+                    bytes.as_ptr() as *const c_void,
+                    bytes.len(),
+                )
+            };
+
+            self.buffer.increment_write_position(size);
+
+            Ok(size)
+        })?;
+
         Ok(OmOffsetSize::new(offset, size as u64))
     }
 

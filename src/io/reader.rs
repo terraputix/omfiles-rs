@@ -244,15 +244,21 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         if T::DATA_TYPE_SCALAR != self.data_type() {
             return None;
         }
-        let mut value = T::default();
 
-        let error =
-            unsafe { om_variable_get_scalar(self.variable, &mut value as *mut T as *mut c_void) };
+        let mut ptr: *mut std::os::raw::c_void = std::ptr::null_mut();
+        let mut size: u64 = 0;
 
-        if error != OmError_t_ERROR_OK {
+        let error = unsafe { om_variable_get_scalar(self.variable, &mut ptr, &mut size) };
+
+        if error != OmError_t_ERROR_OK || ptr.is_null() {
             return None;
         }
-        Some(value)
+
+        // Safety: ptr points to a valid memory region of 'size' bytes
+        // that contains data of the expected type
+        let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, size as usize) };
+
+        Some(T::from_raw_bytes(bytes))
     }
 
     /// Read a variable as an array of a dynamic data type.
