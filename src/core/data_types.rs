@@ -80,6 +80,9 @@ pub trait OmFileScalarDataType: Default {
     const DATA_TYPE_SCALAR: DataType;
 
     /// Creates a new instance from raw bytes
+    ///
+    /// This is the default implementation, which assumes that the bytes
+    /// represent a valid value of Self and that alignment requirements are met.
     fn from_raw_bytes(bytes: &[u8]) -> Self {
         assert!(
             bytes.len() >= mem::size_of::<Self>(),
@@ -101,6 +104,11 @@ pub trait OmFileScalarDataType: Default {
     }
 
     /// Performs an operation with the raw bytes of this value
+    ///
+    /// This is the default implementation, which passes a slice of the bytes
+    /// of self to the provided closure.
+    /// For String and OmNone types, this method is overridden to provide the
+    /// UTF-8 bytes of the string and an empty slice, respectively.
     fn with_raw_bytes<T, F>(&self, f: F) -> T
     where
         F: FnOnce(&[u8]) -> T,
@@ -187,12 +195,15 @@ impl OmFileScalarDataType for f64 {
 impl OmFileScalarDataType for String {
     const DATA_TYPE_SCALAR: DataType = DataType::String;
 
+    /// Create a new String from raw bytes
     fn from_raw_bytes(bytes: &[u8]) -> Self {
         // Attempt to create a UTF-8 string from the bytes
         // If bytes are not valid UTF-8, replace invalid sequences
         String::from_utf8_lossy(bytes).into_owned()
     }
 
+    /// Perform an operation with the raw bytes of this value
+    /// This will always operate on the contiguous UTF-8 bytes of the string
     fn with_raw_bytes<T, F>(&self, f: F) -> T
     where
         F: FnOnce(&[u8]) -> T,
@@ -208,8 +219,9 @@ pub struct OmNone();
 impl OmFileScalarDataType for OmNone {
     const DATA_TYPE_SCALAR: DataType = DataType::None;
 
-    fn from_raw_bytes(_bytes: &[u8]) -> Self {
-        // None type doesn't contain any data, so return empty PhantomData
+    fn from_raw_bytes(bytes: &[u8]) -> Self {
+        assert!(bytes.len() == 0, "OmNone should not have any bytes");
+        // None type doesn't contain any data, so just return the default value
         OmNone()
     }
 
