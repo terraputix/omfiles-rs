@@ -15,6 +15,10 @@ path = "src/bin/testread.rs"
 name = "reformat"
 path = "src/bin/reformat.rs"
 
+[[bin]]
+name = "omdump"
+path = "src/bin/omdump.rs"
+
 # some optimizations for binary/library size in release builds
 # compare: https://github.com/johnthagen/min-sized-rust
 # [profile.release]
