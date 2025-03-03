@@ -130,7 +130,7 @@ impl<Backend: OmFileWriterBackend> OmFileWriter<Backend> {
 
     pub fn write_array(
         &mut self,
-        array: &OmFileWriterArrayFinalized,
+        array: OmFileWriterArrayFinalized,
         name: &str,
         children: &[OmOffsetSize],
     ) -> Result<OmOffsetSize, OmFilesRsError> {

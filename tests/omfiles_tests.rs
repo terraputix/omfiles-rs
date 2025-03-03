@@ -271,7 +271,7 @@ fn test_in_memory_int_compression() -> Result<(), Box<dyn std::error::Error>> {
 
     writer.write_data(data.view(), None, None)?;
     let variable_meta = writer.finalize();
-    let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+    let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
     drop(file_writer); // drop file_writer to release mutable borrow
 
@@ -304,7 +304,7 @@ fn test_in_memory_f32_compression() -> Result<(), Box<dyn std::error::Error>> {
 
     writer.write_data(data.view(), None, None)?;
     let variable_meta = writer.finalize();
-    let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+    let variable = file_writer.write_array(variable_meta, "data", &[])?;
     file_writer.write_trailer(variable)?;
     drop(file_writer); // drop file_writer to release mutable borrow
 
@@ -371,7 +371,7 @@ fn test_write_large() -> Result<(), Box<dyn std::error::Error>> {
         writer.write_data(data.view(), None, None)?;
 
         let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
     }
 
@@ -449,7 +449,7 @@ fn test_write_chunks() -> Result<(), Box<dyn std::error::Error>> {
         writer.write_data(dyn_array2d([1, 1], vec![24.0]).view(), None, None)?;
 
         let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
     }
 
@@ -592,7 +592,7 @@ fn test_offset_write() -> Result<(), Box<dyn std::error::Error>> {
         writer.write_data(data.view(), Some(&[1, 1]), Some(&[5, 5]))?;
 
         let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
     }
 
@@ -660,11 +660,8 @@ fn test_write_3d() -> Result<(), Box<dyn std::error::Error>> {
         let variable_meta = writer.finalize();
         let int32_attribute = file_writer.write_scalar(12323154i32, "int32", &[])?;
         let double_attribute = file_writer.write_scalar(12323154f64, "double", &[])?;
-        let variable = file_writer.write_array(
-            &variable_meta,
-            "data",
-            &[int32_attribute, double_attribute],
-        )?;
+        let variable =
+            file_writer.write_array(variable_meta, "data", &[int32_attribute, double_attribute])?;
         file_writer.write_trailer(variable)?;
     }
 
@@ -833,11 +830,11 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
         // Write meta and attribute information just before the trailer
         let int32_attribute = file_writer.write_scalar(12323154i32, "int32", &[])?;
         let double_attribute = file_writer.write_scalar(12323154f64, "double", &[])?;
-        let subchild_var = file_writer.write_array(&subchild_meta, "subchild", &[])?;
-        let child1_var = file_writer.write_array(&child1_meta, "child1", &[subchild_var])?;
-        let child2_var = file_writer.write_array(&child2_meta, "child2", &[])?;
+        let subchild_var = file_writer.write_array(subchild_meta, "subchild", &[])?;
+        let child1_var = file_writer.write_array(child1_meta, "child1", &[subchild_var])?;
+        let child2_var = file_writer.write_array(child2_meta, "child2", &[])?;
         let parent_var = file_writer.write_array(
-            &parent_meta,
+            parent_meta,
             "parent",
             &[child1_var, child2_var, int32_attribute, double_attribute],
         )?;
@@ -943,7 +940,7 @@ fn test_write_v3() -> Result<(), Box<dyn std::error::Error>> {
         writer.write_data(data.view(), None, None)?;
 
         let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
     }
 
@@ -1158,7 +1155,7 @@ fn test_write_v3_max_io_limit() -> Result<(), Box<dyn std::error::Error>> {
         writer.write_data(data.view(), None, None)?;
 
         let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
     }
 
@@ -1209,7 +1206,7 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
 
         writer.write_data(data.view(), None, None)?;
         let variable_meta = writer.finalize();
-        let variable = file_writer.write_array(&variable_meta, "data", &[])?;
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
         file_writer.write_trailer(variable)?;
     }
 
