@@ -9,10 +9,7 @@ use omfiles_rs::{
         backends::{InMemoryBackend, OmFileReaderBackend},
         mmapfile::{MmapFile, Mode},
     },
-    core::{
-        compression::CompressionType,
-        data_types::{DataType, OmNone},
-    },
+    core::{compression::CompressionType, data_types::DataType},
     errors::OmFilesRsError,
     io::{
         reader::OmFileReader,
