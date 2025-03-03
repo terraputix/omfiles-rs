@@ -9,7 +9,10 @@ use omfiles_rs::{
         backends::{InMemoryBackend, OmFileReaderBackend},
         mmapfile::{MmapFile, Mode},
     },
-    core::{compression::CompressionType, data_types::DataType},
+    core::{
+        compression::CompressionType,
+        data_types::{DataType, OmNone},
+    },
     errors::OmFilesRsError,
     io::{
         reader::OmFileReader,
@@ -101,7 +104,6 @@ fn test_variable() {
         );
     }
 
-    // Verify the written data
     assert_eq!(data, [1, 4, 4, 0, 0, 0, 0, 0, 177, 110, 97, 109, 101]);
 
     // Initialize a variable from the data
@@ -124,7 +126,7 @@ fn test_variable() {
     assert!(!ptr.is_null());
 
     let result_value = unsafe { *(ptr as *const u8) };
-    assert_eq!(result_value, 177);
+    assert_eq!(result_value, value);
 }
 
 #[test]
@@ -198,7 +200,7 @@ fn test_variable_string() {
     let string_bytes = unsafe { slice::from_raw_parts(ptr as *const u8, size as usize) };
     let result_string = std::str::from_utf8(string_bytes).unwrap();
 
-    assert_eq!(result_string, "Hello, World!");
+    assert_eq!(result_string, value);
 }
 
 #[test]
@@ -214,7 +216,7 @@ fn test_variable_none() {
     // Create buffer for the variable
     let mut data = vec![255u8; size_scalar];
 
-    // Write the None scalar
+    // Write the non-existing value -> This is essentially creating a Group
     unsafe {
         om_variable_write_scalar(
             data.as_mut_ptr() as *mut std::os::raw::c_void,
@@ -249,6 +251,35 @@ fn test_variable_none() {
 
     // Verify that retrieval fails with the expected error
     assert_eq!(error, OmError_t_ERROR_INVALID_DATA_TYPE);
+}
+
+#[test]
+fn test_none_variable_as_group() -> Result<(), Box<dyn std::error::Error>> {
+    let mut in_memory_backend = InMemoryBackend::new(vec![]);
+    let mut file_writer = OmFileWriter::new(in_memory_backend.borrow_mut(), 8);
+
+    // Write a regular variable
+    let int_var = file_writer.write_scalar(42i32, "attribute", &[])?;
+    // Write a None type to indicate some type of group
+    let group_var = file_writer.write_none("group", &[int_var])?;
+
+    file_writer.write_trailer(group_var)?;
+    drop(file_writer);
+
+    // Read the file
+    let read = OmFileReader::new(Arc::new(in_memory_backend))?;
+
+    // Verify the group variable
+    assert_eq!(read.get_name().unwrap(), "group");
+    assert_eq!(read.data_type(), DataType::None);
+
+    // Get the child variable, which is an attribute
+    let child = read.get_child(0).unwrap();
+    assert_eq!(child.get_name().unwrap(), "attribute");
+    assert_eq!(child.data_type(), DataType::Int32);
+    assert_eq!(child.read_scalar::<i32>().unwrap(), 42);
+
+    Ok(())
 }
 
 #[test]

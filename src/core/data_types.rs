@@ -201,3 +201,23 @@ impl OmFileScalarDataType for String {
         f(self.as_bytes())
     }
 }
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OmNone();
+
+impl OmFileScalarDataType for OmNone {
+    const DATA_TYPE_SCALAR: DataType = DataType::None;
+
+    fn from_raw_bytes(_bytes: &[u8]) -> Self {
+        // None type doesn't contain any data, so return empty PhantomData
+        OmNone()
+    }
+
+    fn with_raw_bytes<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&[u8]) -> T,
+    {
+        // None type doesn't have any bytes, so pass an empty slice
+        f(&[])
+    }
+}

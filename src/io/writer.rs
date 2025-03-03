@@ -1,7 +1,7 @@
 use crate::backend::backends::OmFileWriterBackend;
 use crate::core::c_defaults::{c_error_string, create_uninit_encoder};
 use crate::core::compression::CompressionType;
-use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
+use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType, OmNone};
 use crate::errors::OmFilesRsError;
 use crate::io::buffered_writer::OmBufferedWriter;
 use ndarray::ArrayViewD;
@@ -103,6 +103,15 @@ impl<Backend: OmFileWriterBackend> OmFileWriter<Backend> {
         })?;
 
         Ok(OmOffsetSize::new(offset, size as u64))
+    }
+
+    pub fn write_none(
+        &mut self,
+        name: &str,
+        children: &[OmOffsetSize],
+    ) -> Result<OmOffsetSize, OmFilesRsError> {
+        // Use write_scalar with OmNone
+        self.write_scalar(OmNone::default(), name, children)
     }
 
     pub fn prepare_array<T: OmFileArrayDataType>(
