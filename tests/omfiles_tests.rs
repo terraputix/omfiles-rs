@@ -858,13 +858,20 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
         // Write meta and attribute information just before the trailer
         let int32_attribute = file_writer.write_scalar(12323154i32, "int32", &[])?;
         let double_attribute = file_writer.write_scalar(12323154f64, "double", &[])?;
+        let string_attribute = file_writer.write_scalar("hello".to_string(), "string", &[])?;
         let subchild_var = file_writer.write_array(subchild_meta, "subchild", &[])?;
         let child1_var = file_writer.write_array(child1_meta, "child1", &[subchild_var])?;
         let child2_var = file_writer.write_array(child2_meta, "child2", &[])?;
         let parent_var = file_writer.write_array(
             parent_meta,
             "parent",
-            &[child1_var, child2_var, int32_attribute, double_attribute],
+            &[
+                child1_var,
+                child2_var,
+                int32_attribute,
+                double_attribute,
+                string_attribute,
+            ],
         )?;
 
         file_writer.write_trailer(parent_var)?;
@@ -878,12 +885,13 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
 
         let all_children_meta = reader.get_flat_variable_metadata();
         let expected_metadata = [
-            ("parent", OmOffsetSize::new(4224, 142)),
-            ("parent/child1", OmOffsetSize::new(4048, 94)),
-            ("parent/child1/subchild", OmOffsetSize::new(3968, 80)),
             ("parent/int32", OmOffsetSize::new(3920, 17)),
             ("parent/double", OmOffsetSize::new(3944, 22)),
-            ("parent/child2", OmOffsetSize::new(4144, 78)),
+            ("parent/string", OmOffsetSize::new(3968, 27)),
+            ("parent/child1/subchild", OmOffsetSize::new(4000, 80)),
+            ("parent/child1", OmOffsetSize::new(4080, 94)),
+            ("parent/child2", OmOffsetSize::new(4176, 78)),
+            ("parent", OmOffsetSize::new(4256, 158)),
         ]
         .iter()
         .map(|(k, v)| (k.to_string(), v.clone()))
@@ -901,7 +909,7 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(parent, expected_parent);
 
         // Check number of children at root level
-        assert_eq!(reader.number_of_children(), 4);
+        assert_eq!(reader.number_of_children(), 5);
 
         // Check child1 data and its subchild
         let child1 = reader.get_child(0).unwrap();
@@ -931,6 +939,19 @@ fn test_hierarchical_variables() -> Result<(), Box<dyn std::error::Error>> {
         let expected_child2 =
             ArrayD::from_shape_vec(vec![2, 2], vec![20.0, 21.0, 22.0, 23.0]).unwrap();
         assert_eq!(child2_data, expected_child2);
+
+        // Check attributes
+        let int32 = reader.get_child(2).unwrap();
+        assert_eq!(int32.get_name().unwrap(), "int32");
+        assert_eq!(int32.read_scalar::<i32>().unwrap(), 12323154i32);
+
+        let double = reader.get_child(3).unwrap();
+        assert_eq!(double.get_name().unwrap(), "double");
+        assert_eq!(double.read_scalar::<f64>().unwrap(), 12323154f64);
+
+        let string = reader.get_child(4).unwrap();
+        assert_eq!(string.get_name().unwrap(), "string");
+        assert_eq!(string.read_scalar::<String>().unwrap(), "hello");
     }
 
     remove_file_if_exists(file);
