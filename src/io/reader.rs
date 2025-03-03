@@ -163,25 +163,31 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     /// Helper function that recursively collects variable metadata
     fn collect_variable_metadata(
         &self,
-        current_path: Vec<u32>,
+        mut current_path: Vec<String>,
         result: &mut HashMap<String, OmOffsetSize>,
     ) {
         // Add current variable's metadata if it has a name and offset_size
-        // TODO: This requires to not repeat in this flattened hashmap
+        // TODO: This requires for names to be unique
         if let Some(name) = self.get_name() {
             if let Some(offset_size) = &self.offset_size {
-                result.insert(name.to_string(), offset_size.clone());
+                current_path.push(name.to_string());
+                // Create hierarchical key
+                let path_str = current_path
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join("/");
+
+                result.insert(path_str, offset_size.clone());
             }
         }
 
         // Process children
         let num_children = self.number_of_children();
         for i in 0..num_children {
-            let mut path = current_path.clone();
-            path.push(i);
-
+            let child_path = current_path.clone();
             if let Some(child) = self.get_child(i) {
-                child.collect_variable_metadata(path, result);
+                child.collect_variable_metadata(child_path, result);
             }
         }
     }
@@ -236,15 +242,21 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         if T::DATA_TYPE_SCALAR != self.data_type() {
             return None;
         }
-        let mut value = T::default();
 
-        let error =
-            unsafe { om_variable_get_scalar(self.variable, &mut value as *mut T as *mut c_void) };
+        let mut ptr: *mut std::os::raw::c_void = std::ptr::null_mut();
+        let mut size: u64 = 0;
 
-        if error != OmError_t_ERROR_OK {
+        let error = unsafe { om_variable_get_scalar(self.variable, &mut ptr, &mut size) };
+
+        if error != OmError_t_ERROR_OK || ptr.is_null() {
             return None;
         }
-        Some(value)
+
+        // Safety: ptr points to a valid memory region of 'size' bytes
+        // that contains data of the expected type
+        let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, size as usize) };
+
+        Some(T::from_raw_bytes(bytes))
     }
 
     /// Read a variable as an array of a dynamic data type.
