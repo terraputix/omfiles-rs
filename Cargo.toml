@@ -27,7 +27,7 @@ path = "src/bin/reformat.rs"
 
 [dependencies]
 memmap2 = "0.9.4"
-om-file-format-sys = { git = "https://github.com/open-meteo/om-file-format", rev = "67e464335cc992adbfecf8f1d74045de268418ab" }
+om-file-format-sys = { git = "https://github.com/open-meteo/om-file-format", rev = "ab063ea839c5a2965505a69947fd70dbd4253b34" }
 ndarray = "0.16.0"
 num-traits = "0.2.14"
 

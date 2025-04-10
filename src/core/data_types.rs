@@ -33,7 +33,7 @@ pub enum DataType {
 
 impl DataType {
     pub fn to_c(&self) -> OmDataType_t {
-        *self as OmDataType_t
+        unsafe { std::mem::transmute(*self as u32) }
     }
 }
 

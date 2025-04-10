@@ -11,7 +11,7 @@ use om_file_format_sys::{
     om_encoder_count_chunks_in_array, om_encoder_init, om_encoder_lut_buffer_size, om_header_write,
     om_header_write_size, om_trailer_size, om_trailer_write, om_variable_write_numeric_array,
     om_variable_write_numeric_array_size, om_variable_write_scalar, om_variable_write_scalar_size,
-    OmEncoder_t, OmError_t_ERROR_OK,
+    OmEncoder_t, OmError_t,
 };
 use std::borrow::BorrowMut;
 use std::marker::PhantomData;
@@ -256,7 +256,7 @@ impl<'a, OmType: OmFileArrayDataType, Backend: OmFileWriterBackend>
                 dimensions.len() as u64,
             )
         };
-        if error != OmError_t_ERROR_OK {
+        if error != OmError_t::ERROR_OK {
             return Err(OmFilesRsError::FileWriterError {
                 errno: error as i32,
                 error: c_error_string(error),

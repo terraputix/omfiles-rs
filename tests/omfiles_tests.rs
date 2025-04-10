@@ -2,7 +2,7 @@ use ndarray::{s, Array2, ArrayD, ArrayViewD};
 use om_file_format_sys::{
     fpxdec32, fpxenc32, om_variable_get_children_count, om_variable_get_scalar,
     om_variable_get_type, om_variable_init, om_variable_write_scalar,
-    om_variable_write_scalar_size, OmError_t_ERROR_INVALID_DATA_TYPE, OmError_t_ERROR_OK,
+    om_variable_write_scalar_size, OmError_t,
 };
 use omfiles_rs::{
     backend::{
@@ -119,7 +119,7 @@ fn test_variable() {
     let error = unsafe { om_variable_get_scalar(om_variable, &mut ptr, &mut size) };
 
     // Verify successful retrieval and the value
-    assert_eq!(error, OmError_t_ERROR_OK);
+    assert_eq!(error, OmError_t::ERROR_OK);
     assert!(!ptr.is_null());
 
     let result_value = unsafe { *(ptr as *const u8) };
@@ -190,7 +190,7 @@ fn test_variable_string() {
     let error = unsafe { om_variable_get_scalar(om_variable, &mut ptr, &mut size) };
 
     // Verify successful retrieval and the value
-    assert_eq!(error, OmError_t_ERROR_OK);
+    assert_eq!(error, OmError_t::ERROR_OK);
     assert!(!ptr.is_null());
 
     // Convert the raw bytes back to a string
@@ -247,7 +247,7 @@ fn test_variable_none() {
     let error = unsafe { om_variable_get_scalar(om_variable, &mut ptr, &mut size) };
 
     // Verify that retrieval fails with the expected error
-    assert_eq!(error, OmError_t_ERROR_INVALID_DATA_TYPE);
+    assert_eq!(error, OmError_t::ERROR_INVALID_DATA_TYPE);
 }
 
 #[test]
