@@ -15,6 +15,10 @@ path = "src/bin/testread.rs"
 name = "reformat"
 path = "src/bin/reformat.rs"
 
+[[bin]]
+name = "windspeed"
+path = "src/bin/windspeed.rs"
+
 # some optimizations for binary/library size in release builds
 # compare: https://github.com/johnthagen/min-sized-rust
 # [profile.release]
