@@ -5,7 +5,7 @@ use crate::errors::OmFilesRsError;
 use ndarray::ArrayD;
 use om_file_format_sys::{
     om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
-    OmError_t_ERROR_OK,
+    OmError_t,
 };
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
@@ -83,7 +83,7 @@ pub trait OmFileReaderBackend {
 
                 let mut data_read = new_data_read(&index_read);
 
-                let mut error = OmError_t_ERROR_OK;
+                let mut error = OmError_t::ERROR_OK;
 
                 // Loop over data blocks and read compressed data chunks
                 while om_decoder_next_data_read(
@@ -115,7 +115,7 @@ pub trait OmFileReaderBackend {
                         return Err(OmFilesRsError::DecoderError(error_string));
                     }
                 }
-                if error != OmError_t_ERROR_OK {
+                if error != OmError_t::ERROR_OK {
                     let error_string = c_error_string(error);
                     return Err(OmFilesRsError::DecoderError(error_string));
                 }

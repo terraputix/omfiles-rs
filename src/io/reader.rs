@@ -12,9 +12,8 @@ use om_file_format_sys::{
     om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
     om_variable_get_children_count, om_variable_get_chunks, om_variable_get_compression,
     om_variable_get_dimensions, om_variable_get_name, om_variable_get_scalar,
-    om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmError_t_ERROR_OK,
-    OmHeaderType_t_OM_HEADER_INVALID, OmHeaderType_t_OM_HEADER_LEGACY,
-    OmHeaderType_t_OM_HEADER_READ_TRAILER, OmVariable_t,
+    om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmError_t,
+    OmHeaderType_t, OmVariable_t,
 };
 use std::collections::HashMap;
 use std::fs::File;
@@ -38,7 +37,11 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     #[allow(non_upper_case_globals)]
     pub fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
-        let header_size = unsafe { om_header_size() } as u64;
+        let header_size = unsafe { om_header_size() };
+        if backend.count() < header_size {
+            return Err(OmFilesRsError::FileTooSmall);
+        }
+        let header_size = header_size as u64;
         let owned_data: Result<Vec<u8>, OmFilesRsError> = backend.get_bytes_owned(0, header_size);
         let header_data = match owned_data {
             Ok(data) => data,
@@ -51,8 +54,8 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
         let variable_and_offset = {
             match header_type {
-                OmHeaderType_t_OM_HEADER_LEGACY => Ok((header_data, None)),
-                OmHeaderType_t_OM_HEADER_READ_TRAILER => unsafe {
+                OmHeaderType_t::OM_HEADER_LEGACY => Ok((header_data, None)),
+                OmHeaderType_t::OM_HEADER_READ_TRAILER => unsafe {
                     let file_size = backend.count();
                     let trailer_size = om_trailer_size();
                     let trailer_offset = (file_size - trailer_size) as u64;
@@ -84,10 +87,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                     };
                     Ok((variable_data, Some(offset_size)))
                 },
-                OmHeaderType_t_OM_HEADER_INVALID => {
+                OmHeaderType_t::OM_HEADER_INVALID => {
                     return Err(OmFilesRsError::NotAnOmFile);
                 }
-                _ => return Err(OmFilesRsError::NotAnOmFile),
             }
         };
 
@@ -248,7 +250,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
         let error = unsafe { om_variable_get_scalar(self.variable, &mut ptr, &mut size) };
 
-        if error != OmError_t_ERROR_OK || ptr.is_null() {
+        if error != OmError_t::ERROR_OK || ptr.is_null() {
             return None;
         }
 
@@ -309,7 +311,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             )
         };
 
-        if error != OmError_t_ERROR_OK {
+        if error != OmError_t::ERROR_OK {
             let error_string = c_error_string(error);
             return Err(OmFilesRsError::DecoderError(error_string));
         }
