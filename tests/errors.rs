@@ -1,11 +1,16 @@
 use ndarray::ArrayD;
 use omfiles_rs::backend::backends::InMemoryBackend;
+use omfiles_rs::backend::mmapfile::MmapFile;
 use omfiles_rs::core::compression::CompressionType;
 use omfiles_rs::errors::OmFilesRsError;
 use omfiles_rs::io::reader::OmFileReader;
 use omfiles_rs::io::writer::OmFileWriter;
 use std::borrow::BorrowMut;
+use std::fs;
 use std::sync::Arc;
+
+mod test_utils;
+use test_utils::remove_file_if_exists;
 
 #[test]
 fn test_mismatching_cube_dimension_length() {
@@ -107,6 +112,28 @@ fn test_mismatching_cube_dimension_length_for_read() {
     assert_eq!(error_string(result), "Mismatching cube dimension length");
 }
 
+#[test]
+fn test_opening_not_an_om_file() {
+    let short_file = "not_an_om_file.txt";
+    fs::write(short_file, b"This is not an OM file. ").unwrap();
+
+    // Try to open the file as an OM file
+    let result = OmFileReader::<MmapFile>::from_file(short_file);
+    assert!(matches!(result, Err(OmFilesRsError::FileTooSmall)));
+    remove_file_if_exists(short_file);
+
+    let longer_file = "not_an_om_file.txt";
+    fs::write(
+        longer_file,
+        b"This is not an OM file. It is longer than the previous one and could accommodate the header.",
+    )
+    .unwrap();
+
+    // Try to open the file as an OM file
+    let result = OmFileReader::<MmapFile>::from_file(longer_file);
+    assert!(matches!(result, Err(OmFilesRsError::NotAnOmFile)));
+    remove_file_if_exists(longer_file);
+}
 fn error_string<T>(result: Result<T, OmFilesRsError>) -> String {
     match result {
         Ok(_) => {

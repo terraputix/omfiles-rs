@@ -37,7 +37,11 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
     #[allow(non_upper_case_globals)]
     pub fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
-        let header_size = unsafe { om_header_size() } as u64;
+        let header_size = unsafe { om_header_size() };
+        if backend.count() < header_size {
+            return Err(OmFilesRsError::FileTooSmall);
+        }
+        let header_size = header_size as u64;
         let owned_data: Result<Vec<u8>, OmFilesRsError> = backend.get_bytes_owned(0, header_size);
         let header_data = match owned_data {
             Ok(data) => data,

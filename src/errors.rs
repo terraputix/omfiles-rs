@@ -29,6 +29,7 @@ pub enum OmFilesRsError {
     InvalidDataType,
     DecoderError(String),
     NotAnOmFile,
+    FileTooSmall,
     NotImplementedError(String),
     ArrayNotContiguous,
 }
@@ -94,6 +95,9 @@ impl std::fmt::Display for OmFilesRsError {
             }
             OmFilesRsError::NotAnOmFile => {
                 write!(f, "Not an OM file")
+            }
+            OmFilesRsError::FileTooSmall => {
+                write!(f, "File is too small")
             }
             OmFilesRsError::NotImplementedError(e) => {
                 write!(f, "Not implemented: {}", e)

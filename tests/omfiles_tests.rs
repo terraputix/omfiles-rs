@@ -27,6 +27,9 @@ use std::{
     sync::Arc,
 };
 
+mod test_utils;
+use test_utils::remove_file_if_exists;
+
 #[test]
 fn turbo_pfor_roundtrip() {
     let data: Vec<f32> = vec![10.0, 22.0, 23.0, 24.0];
@@ -1274,6 +1277,37 @@ fn test_nan() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[test]
+fn test_opening_legacy_file() {
+    // For legacy files, we need a file with the correct legacy header format
+    let file = "legacy_om_file.om";
+
+    // Create a minimal legacy OM file
+    // The header needs to make om_header_type return OM_HEADER_LEGACY
+    // Note: This is a simplified test that depends on the header detection logic
+    {
+        let mut data = vec![0u8; 40]; // Minimal header size
+        data[0] = 79; // 'O'
+        data[1] = 77; // 'M'
+        data[2] = 2; // version 2 is legacy!
+
+        fs::write(file, data).unwrap();
+    }
+
+    // Try to open the legacy file and check properties of the reader
+    let result = OmFileReader::<MmapFile>::from_file(file);
+    assert!(result.is_ok());
+    let reader = result.unwrap();
+    println!("Compression Type: {:?}", reader.compression());
+    assert_eq!(reader.compression(), CompressionType::PforDelta2dInt16);
+    assert_eq!(reader.get_dimensions(), [0u64, 0u64]);
+    assert_eq!(reader.get_chunk_dimensions(), [0u64, 0u64]);
+    assert_eq!(reader.get_name(), None);
+
+    // Clean up
+    remove_file_if_exists(file);
+}
+
 fn copy_vec_u64_to_vec_usize(input: &Vec<u64>) -> Vec<usize> {
     input.iter().map(|&x| x as usize).collect()
 }
@@ -1299,11 +1333,5 @@ fn nd_assert_eq_with_accuracy_and_nan(
                 a
             );
         }
-    }
-}
-
-fn remove_file_if_exists(file: &str) {
-    if fs::metadata(file).is_ok() {
-        fs::remove_file(file).unwrap();
     }
 }
