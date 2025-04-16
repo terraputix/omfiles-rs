@@ -284,7 +284,9 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let number_of_chunks = decoder.number_of_chunks;
 
         // Allocate space for the complete LUT
-        let mut lut = vec![0u64; number_of_chunks as usize];
+        // Size is number of chunks + 1 so it is possible to store the end address of each chunk
+        // plus the offset to the first chunk
+        let mut lut = vec![0u64; number_of_chunks as usize + 1];
 
         let mut index_read = new_index_read(&decoder);
 
@@ -313,16 +315,17 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
             // Extract the partial LUT for this range
             let lut_ptr = lut[(start_chunk as usize)..].as_mut_ptr();
+            let lut_out_size = (number_of_chunks + 1 - start_chunk) as u64;
             let error = unsafe {
                 om_decoder_get_partial_lut(
                     &decoder,
                     index_data.as_ptr() as *const c_void,
                     index_data.len() as u64,
                     lut_ptr,
-                    (number_of_chunks - start_chunk) as u64,
+                    lut_out_size,
                     start_chunk,
                     start_chunk, // index_range_lower_bound is same as start_chunk here
-                    chunk_count,
+                    chunk_count + 1,
                 )
             };
 
