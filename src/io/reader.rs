@@ -1,8 +1,6 @@
 #![allow(non_snake_case)]
 use crate::backend::backends::OmFileReaderBackend;
 use crate::backend::mmapfile::{MmapFile, Mode};
-use crate::core::c_defaults::new_data_read;
-use crate::core::c_defaults::new_index_read;
 use crate::core::c_defaults::{c_error_string, create_uninit_decoder};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
@@ -10,24 +8,23 @@ use crate::errors::OmFilesRsError;
 use crate::io::writer::OmOffsetSize;
 use ndarray::ArrayD;
 use num_traits::Zero;
-use om_file_format_sys::om_decoder_decode_chunks;
-use om_file_format_sys::om_decoder_next_data_read;
-use om_file_format_sys::OmDecoder_t;
 use om_file_format_sys::{
-    om_decoder_init, om_decoder_next_index_read, om_decoder_read_buffer_size, om_header_size,
-    om_header_type, om_trailer_read, om_trailer_size, om_variable_get_add_offset,
-    om_variable_get_children, om_variable_get_children_count, om_variable_get_chunks,
-    om_variable_get_compression, om_variable_get_dimensions, om_variable_get_name,
-    om_variable_get_scalar, om_variable_get_scale_factor, om_variable_get_type, om_variable_init,
-    OmError_t, OmHeaderType_t, OmVariable_t,
+    om_decoder_init, om_decoder_read_buffer_size, om_header_size, om_header_type, om_trailer_read,
+    om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
+    om_variable_get_children_count, om_variable_get_chunks, om_variable_get_compression,
+    om_variable_get_dimensions, om_variable_get_name, om_variable_get_scalar,
+    om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmError_t,
+    OmHeaderType_t, OmVariable_t,
 };
 use std::collections::HashMap;
 use std::fs::File;
+use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::ops::Range;
 use std::os::raw::c_void;
 use std::sync::Arc;
-use tokio::task::JoinError;
+
+const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(8).unwrap();
 
 /// A wrapper around the raw C pointer OmVariable_t
 /// marked as Send + Sync.
@@ -40,7 +37,7 @@ use tokio::task::JoinError;
 /// The pointer itself points into the `variable_data` Vec owned by the
 /// `OmFileReader`, ensuring its validity for the lifetime of the reader instance.
 #[derive(Clone, Copy, Debug)]
-struct OmVariablePtr(*const OmVariable_t);
+pub(crate) struct OmVariablePtr(*const OmVariable_t);
 
 // SAFETY: See safety note above. We assert that read-only access via this pointer
 // is safe to perform concurrently from multiple threads, provided the underlying
@@ -63,7 +60,9 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
     /// Here the LUT and additional attributes of the variable need to be stored.
     pub variable_data: Vec<u8>,
     /// Opaque pointer to the variable defined by header/trailer
-    variable: OmVariablePtr,
+    pub(crate) variable: OmVariablePtr,
+    /// Maximum number of concurrent tasks for async operations
+    pub(crate) max_concurrency: NonZeroUsize,
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
@@ -133,6 +132,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             backend,
             variable_data,
             variable: OmVariablePtr(variable_ptr),
+            max_concurrency: MAX_CONCURRENCY,
         })
     }
 
@@ -269,6 +269,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             backend: self.backend.clone(),
             variable_data: child_variable,
             variable: OmVariablePtr(child_variable_ptr),
+            max_concurrency: MAX_CONCURRENCY,
         })
     }
 
@@ -405,269 +406,5 @@ impl OmFileReader<MmapFile> {
     /// Linux keeps the file alive as long as some processes have it open.
     pub fn was_deleted(&self) -> bool {
         self.backend.was_deleted()
-    }
-}
-
-impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend> {
-    /// Read a variable asynchronously, using concurrent fetching and decoding
-    pub async fn read_async<T: OmFileArrayDataType + Clone + Zero + Send + Sync + 'static>(
-        &self,
-        dim_read: &[Range<u64>],
-        io_size_max: Option<u64>,
-        io_size_merge: Option<u64>,
-    ) -> Result<ArrayD<T>, OmFilesRsError> {
-        let out_dims: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
-        let out_dims_usize = out_dims.iter().map(|&x| x as usize).collect::<Vec<_>>();
-
-        let mut out = ArrayD::<T>::zeros(out_dims_usize);
-
-        self.read_into_async::<T>(
-            &mut out,
-            dim_read,
-            &vec![0; dim_read.len()],
-            &out_dims,
-            io_size_max,
-            io_size_merge,
-        )
-        .await?;
-
-        Ok(out)
-    }
-
-    /// Read into an existing array asynchronously with concurrent processing
-    pub async fn read_into_async<T: OmFileArrayDataType + Send + Sync + 'static>(
-        &self,
-        into: &mut ArrayD<T>,
-        dim_read: &[Range<u64>],
-        into_cube_offset: &[u64],
-        into_cube_dimension: &[u64],
-        io_size_max: Option<u64>,
-        io_size_merge: Option<u64>,
-    ) -> Result<(), OmFilesRsError> {
-        let io_size_max = io_size_max.unwrap_or(65536);
-        let io_size_merge = io_size_merge.unwrap_or(512);
-
-        // Verify data type
-        if T::DATA_TYPE_ARRAY != self.data_type() {
-            return Err(OmFilesRsError::InvalidDataType);
-        }
-
-        // Validate dimensions
-        let n_dimensions_read = dim_read.len();
-        let n_dims = self.get_dimensions().len();
-        if n_dims != n_dimensions_read
-            || n_dimensions_read != into_cube_offset.len()
-            || n_dimensions_read != into_cube_dimension.len()
-        {
-            return Err(OmFilesRsError::MismatchingCubeDimensionLength);
-        }
-
-        // Prepare read parameters
-        let read_offset: Vec<u64> = dim_read.iter().map(|r| r.start).collect();
-        let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
-
-        // Get mutable slice to the array data
-        let into_slice = into
-            .as_slice_mut()
-            .ok_or(OmFilesRsError::ArrayNotContiguous)?;
-        let into_ptr = into_slice.as_mut_ptr() as *mut c_void;
-
-        // Initialize decoder
-        let mut decoder = unsafe { create_uninit_decoder() };
-        let error = unsafe {
-            om_decoder_init(
-                &mut decoder,
-                *self.variable,
-                n_dimensions_read as u64,
-                read_offset.as_ptr(),
-                read_count.as_ptr(),
-                into_cube_offset.as_ptr(),
-                into_cube_dimension.as_ptr(),
-                io_size_merge,
-                io_size_max,
-            )
-        };
-
-        if error != OmError_t::ERROR_OK {
-            let error_string = c_error_string(error);
-            return Err(OmFilesRsError::DecoderError(error_string));
-        }
-
-        // Get buffer size for decoding
-        let chunk_buffer_size = unsafe { om_decoder_read_buffer_size(&decoder) } as usize;
-
-        // Use tokio JoinSet for task management
-        let mut tasks =
-            tokio::task::JoinSet::<Result<Result<(), OmFilesRsError>, JoinError>>::new();
-
-        // Track any error that occurs during processing
-        let mut any_error: Option<OmFilesRsError> = None;
-
-        unsafe {
-            // Loop over index blocks
-            let mut index_read = new_index_read(&decoder);
-            while om_decoder_next_index_read(&decoder, &mut index_read) {
-                // Clone backend for this index block's processing
-                let backend = self.backend.clone();
-
-                // Fetch index data in a blocking task
-                let index_offset = index_read.offset;
-                let index_count = index_read.count;
-
-                // Simple approach: just call get_bytes_owned in a blocking task
-                let index_data =
-                    match get_data_with_fallback(&backend, index_offset, index_count).await {
-                        Ok(data) => data,
-                        Err(e) => {
-                            any_error = Some(e);
-                            break;
-                        }
-                    };
-
-                // Process data reads for this index block
-                let mut data_read = new_data_read(&index_read);
-                let mut error = OmError_t::ERROR_OK;
-
-                while om_decoder_next_data_read(
-                    &decoder,
-                    &mut data_read,
-                    index_data.as_ptr() as *const c_void,
-                    index_count,
-                    &mut error,
-                ) {
-                    // Capture values needed for the task
-                    let data_offset = data_read.offset;
-                    let data_count = data_read.count;
-                    let chunk_index = data_read.chunkIndex;
-
-                    // Clone backend for the task
-                    let backend = self.backend.clone();
-
-                    // Convert raw pointers to usize which is Send + Sync
-                    // FIXME: THIS IS HIGHLY UNSAFE AND SHOULD BE IMPROVED
-                    let decoder_ptr_val = &decoder as *const _ as usize;
-                    let into_ptr_val = into_ptr as usize;
-
-                    // Spawn a task for each chunk
-                    tasks.spawn(async move {
-                        // 1. Get data bytes using a blocking task
-                        let data_bytes =
-                            get_data_with_fallback(&backend, data_offset, data_count).await;
-
-                        let data_bytes = data_bytes.unwrap(); // FIXME!!!
-
-                        // 2. Allocate a chunk buffer
-                        let mut chunk_buffer = vec![0u8; chunk_buffer_size];
-
-                        // 3. Decode the chunk in a blocking task
-                        tokio::task::spawn_blocking(move || {
-                            let mut error = OmError_t::ERROR_OK;
-
-                            // SAFETY: We're using raw pointers here, but they're safe because:
-                            // - decoder_ptr points to the shared decoder that's valid for the whole function
-                            // - into_ptr points to the output array that's valid for the whole function
-                            // - Each chunk writes to a different part of the output array
-                            let success = om_decoder_decode_chunks(
-                                decoder_ptr_val as *const OmDecoder_t,
-                                chunk_index,
-                                data_bytes.as_ptr() as *const c_void,
-                                data_count,
-                                into_ptr_val as *mut c_void,
-                                chunk_buffer.as_mut_ptr() as *mut c_void,
-                                &mut error,
-                            );
-
-                            if !success {
-                                let error_string = c_error_string(error);
-                                return Err(OmFilesRsError::DecoderError(error_string));
-                            }
-
-                            Ok(())
-                        })
-                        .await
-                    });
-                }
-
-                // Check for errors from om_decoder_next_data_read
-                if error != OmError_t::ERROR_OK {
-                    let error_string = c_error_string(error);
-                    any_error = Some(OmFilesRsError::DecoderError(error_string));
-                    break;
-                }
-            }
-        }
-
-        // If we encountered an error, abort and return it
-        if let Some(err) = any_error {
-            // Clean up any pending tasks
-            while let Some(_) = tasks.join_next().await {}
-            return Err(err);
-        }
-
-        // Wait for all tasks to complete
-        while let Some(result) = tasks.join_next().await {
-            match result {
-                Ok(Ok(Ok(()))) => {} // Task completed successfully
-                Ok(Ok(Err(e))) => {
-                    // Task returned a OmFilesRsError
-                    any_error = Some(e);
-                    break;
-                }
-                Ok(Err(e)) => {
-                    // Task panicked
-                    any_error = Some(OmFilesRsError::TaskError(format!("{}", e)));
-                    break;
-                }
-                Err(e) => {
-                    // Task panicked
-                    any_error = Some(OmFilesRsError::TaskError(format!("{}", e)));
-                    break;
-                }
-            }
-        }
-
-        // If any task failed, clean up and return the error
-        if let Some(err) = any_error {
-            // Clean up any pending tasks
-            while let Some(_) = tasks.join_next().await {}
-            return Err(err);
-        }
-
-        Ok(())
-    }
-}
-
-// Helper function to get data with fallback from get_bytes if get_bytes_owned fails
-async fn get_data_with_fallback<Backend: OmFileReaderBackend + Send + Sync + 'static>(
-    backend: &Arc<Backend>,
-    offset: u64,
-    count: u64,
-) -> Result<Vec<u8>, OmFilesRsError> {
-    // Try get_bytes_owned first in a blocking task
-    match tokio::task::spawn_blocking({
-        let backend = backend.clone();
-        move || backend.get_bytes_owned(offset, count)
-    })
-    .await
-    {
-        Ok(Ok(data)) => Ok(data),
-        Ok(Err(error)) => {
-            // If get_bytes_owned failed with NotImplementedError, try get_bytes as fallback
-            match error {
-                OmFilesRsError::NotImplementedError(_) => {
-                    // Get bytes directly using get_bytes
-                    // This must run in a blocking task since get_bytes returns a reference
-                    // We need to copy the data to return an owned Vec<u8>
-                    tokio::task::spawn_blocking({
-                        let backend = backend.clone();
-                        move || backend.get_bytes(offset, count).map(|bytes| bytes.to_vec())
-                    })
-                    .await
-                    .map_err(|e| OmFilesRsError::TaskError(format!("{}", e)))?
-                }
-                _ => Err(error), // Return original error if it's not NotImplementedError
-            }
-        }
-        Err(e) => Err(OmFilesRsError::TaskError(format!("{}", e))),
     }
 }
