@@ -1308,6 +1308,145 @@ fn test_opening_legacy_file() {
     remove_file_if_exists(file);
 }
 
+#[tokio::test]
+async fn test_read_async() -> Result<(), Box<dyn std::error::Error>> {
+    // Setup: Create a test file with multi-dimensional data
+    let file = "test_read_async.om";
+    remove_file_if_exists(file);
+
+    let dims = vec![10, 10, 10]; // 3D data
+    let chunk_dimensions = vec![4, 4, 4];
+    let compression = CompressionType::PforDelta2dInt16;
+    let scale_factor = 1.0;
+    let add_offset = 0.0;
+
+    // Generate test data
+    let data = ArrayD::from_shape_vec(
+        copy_vec_u64_to_vec_usize(&dims),
+        (0..1000).map(|i| i as f32).collect(),
+    )
+    .unwrap();
+
+    // Write the test file
+    {
+        let file_handle = File::create(file)?;
+        let mut file_writer = OmFileWriter::new(&file_handle, 8);
+        let mut writer = file_writer.prepare_array::<f32>(
+            dims.clone(),
+            chunk_dimensions,
+            compression,
+            scale_factor,
+            add_offset,
+        )?;
+
+        writer.write_data(data.view(), None, None)?;
+
+        let variable_meta = writer.finalize();
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
+        file_writer.write_trailer(variable)?;
+    }
+
+    // Test async read functionality
+    {
+        let file_for_reading = File::open(file)?;
+        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+        let reader = OmFileReader::new(Arc::new(read_backend))?;
+
+        // Test 1: Compare sync and async read for the full data
+        let sync_data = reader.read::<f32>(&[0..10, 0..10, 0..10], None, None)?;
+        let async_data = reader
+            .read_async::<f32>(&[0..10, 0..10, 0..10], None, None)
+            .await?;
+
+        assert_eq!(sync_data, async_data);
+        assert_eq!(sync_data, data);
+
+        // Test 2: Read partial data
+        let partial_sync = reader.read::<f32>(&[2..5, 3..7, 1..3], None, None)?;
+        let partial_async = reader
+            .read_async::<f32>(&[2..5, 3..7, 1..3], None, None)
+            .await?;
+
+        assert_eq!(partial_sync, partial_async);
+
+        // Test 3: Concurrent reads of different parts of the data
+        // Instead of spawning separate tasks, use join! to run them concurrently
+        let ranges = [
+            [0..5, 0..5, 0..5],
+            [5..10, 0..5, 0..5],
+            [0..5, 5..10, 0..5],
+            [5..10, 5..10, 0..5],
+            [0..5, 0..5, 5..10],
+            [5..10, 0..5, 5..10],
+            [0..5, 5..10, 5..10],
+            [5..10, 5..10, 5..10],
+        ];
+
+        // Run them in batches of 4 to avoid too many concurrent operations
+        let results1 = tokio::join!(
+            reader.read_async::<f32>(&ranges[0], None, None),
+            reader.read_async::<f32>(&ranges[1], None, None),
+            reader.read_async::<f32>(&ranges[2], None, None),
+            reader.read_async::<f32>(&ranges[3], None, None),
+        );
+
+        let results2 = tokio::join!(
+            reader.read_async::<f32>(&ranges[4], None, None),
+            reader.read_async::<f32>(&ranges[5], None, None),
+            reader.read_async::<f32>(&ranges[6], None, None),
+            reader.read_async::<f32>(&ranges[7], None, None),
+        );
+
+        // Combine all results
+        let results = [
+            results1.0?,
+            results1.1?,
+            results1.2?,
+            results1.3?,
+            results2.0?,
+            results2.1?,
+            results2.2?,
+            results2.3?,
+        ];
+
+        // Verify all results
+        for (i, async_result) in results.iter().enumerate() {
+            // Calculate expected range
+            let x_start = if i % 2 == 0 { 0 } else { 5 };
+            let y_start = if (i / 2) % 2 == 0 { 0 } else { 5 };
+            let z_start = if i < 4 { 0 } else { 5 };
+
+            // Get the same data synchronously for comparison
+            let sync_result = reader.read::<f32>(
+                &[
+                    x_start..(x_start + 5),
+                    y_start..(y_start + 5),
+                    z_start..(z_start + 5),
+                ],
+                None,
+                None,
+            )?;
+
+            assert_eq!(async_result, &sync_result);
+        }
+
+        // Test 4: Test with different IO size parameters
+        let small_io = reader
+            .read_async::<f32>(&[0..10, 0..10, 0..10], Some(128), Some(32))
+            .await?;
+        let large_io = reader
+            .read_async::<f32>(&[0..10, 0..10, 0..10], Some(65536), Some(1024))
+            .await?;
+
+        assert_eq!(small_io, large_io);
+        assert_eq!(small_io, data);
+    }
+
+    // Clean up
+    remove_file_if_exists(file);
+    Ok(())
+}
+
 fn copy_vec_u64_to_vec_usize(input: &Vec<u64>) -> Vec<usize> {
     input.iter().map(|&x| x as usize).collect()
 }

@@ -20,7 +20,7 @@ pub trait OmFileWriterBackend {
 /// A trait for reading byte data from different storage backends.
 /// Provides methods for reading bytes either by reference or as owned data,
 /// as well as functions for prefetching and pre-reading data.
-pub trait OmFileReaderBackend {
+pub trait OmFileReaderBackend: Send + Sync {
     /// Length in bytes
     fn count(&self) -> usize;
     fn needs_prefetch(&self) -> bool;
