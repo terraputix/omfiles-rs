@@ -6,6 +6,9 @@ use crate::core::c_defaults::{
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
 use crate::io::reader::{OmFileReader, OmVariablePtr};
+use async_executor::Executor;
+use async_lock::Semaphore;
+use blocking::unblock;
 use ndarray::ArrayD;
 use num_traits::Zero;
 use om_file_format_sys::{
@@ -14,10 +17,22 @@ use om_file_format_sys::{
     OmError_t, OmRange_t,
 };
 use std::cell::UnsafeCell;
+use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::os::raw::c_void;
-use std::sync::Arc;
-use tokio::sync::Semaphore;
+use std::sync::{Arc, OnceLock};
+
+/// Executor for asynchronous tasks
+/// TODO: this could potentially be moved to the reader level
+static EXECUTOR: OnceLock<Executor<'static>> = OnceLock::new();
+/// Get the executor for asynchronous tasks
+fn get_executor() -> &'static Executor<'static> {
+    EXECUTOR.get_or_init(|| Executor::new())
+}
+
+/// Maximum number of concurrent tasks for async operations
+/// TODO: this could potentially be moved to the reader level
+const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(8).unwrap();
 
 impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend> {
     /// Read a variable asynchronously, using concurrent fetching and decoding
@@ -91,19 +106,18 @@ impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend>
         )?);
 
         // Semaphore to limit concurrency
-        let semaphore = Arc::new(Semaphore::new(self.max_concurrency.get()));
+        let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENCY.get()));
 
-        // Use tokio JoinSet for task management
-        let mut tasks = tokio::task::JoinSet::<Result<(), OmFilesRsError>>::new();
+        // Use a vector to collect task handles
+        let mut tasks = Vec::new();
 
         // Process all index blocks
         let mut index_read = new_index_read(&decoder.decoder);
         while decoder.next_index_read(&mut index_read) {
             // Fetch index data in a blocking task
             let index_data = {
-                // Simple approach: just call get_bytes_owned in a blocking task
                 // Acquire permit, limiting concurrency
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = semaphore.acquire().await;
                 get_bytes_async(&self.backend.clone(), index_read.offset, index_read.count).await?
             };
 
@@ -125,45 +139,55 @@ impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend>
             for (offset, count, chunk_index) in chunk_tasks {
                 let decoder_clone = decoder.clone();
                 let into_clone = into.clone();
-                let semaphore_clone = semaphore.clone();
                 let backend_clone = self.backend.clone();
+                let semaphore_clone = semaphore.clone();
 
-                tasks.spawn(async move {
+                tasks.push(get_executor().spawn(async move {
                     // Acquire permit limiting concurrency
-                    let _permit = semaphore_clone
-                        .acquire_owned()
-                        .await
-                        .expect("Semaphore closed");
+                    let permit = semaphore_clone.acquire_arc().await;
                     let data_bytes = get_bytes_async(&backend_clone, offset, count).await?;
 
                     // Process the chunk
-                    ChunkDecodeTask {
+                    let result = ChunkDecodeTask {
                         chunk_index,
                         data_bytes,
                         output: into_clone,
                         decoder: decoder_clone,
                     }
                     .process()
-                    .await
-                });
+                    .await;
+
+                    // Release the permit by dropping it explicitly
+                    drop(permit);
+
+                    result
+                }));
             }
         }
 
         // Wait for all tasks to complete
-        while let Some(result) = tasks.join_next().await {
-            match result {
-                Ok(Ok(())) => {} // Task completed successfully
-                Ok(Err(e)) => {
-                    // Cancel all other tasks immediately when error encountered
-                    tasks.abort_all();
-                    return Err(e);
+        let mut encountered_error = None;
+
+        // Run the executor with our collected tasks
+        get_executor()
+            .run(async {
+                for task in tasks {
+                    match task.await {
+                        Ok(()) => {} // Task completed successfully
+                        Err(e) => {
+                            // Store first error encountered
+                            if encountered_error.is_none() {
+                                encountered_error = Some(e);
+                            }
+                        }
+                    }
                 }
-                Err(e) => {
-                    // Task panicked
-                    tasks.abort_all();
-                    return Err(OmFilesRsError::TaskError(format!("{}", e)));
-                }
-            }
+            })
+            .await;
+
+        // Return error if any occurred
+        if let Some(e) = encountered_error {
+            return Err(e);
         }
 
         Ok(())
@@ -173,53 +197,43 @@ impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend>
 /// Asynchronously fetches a byte range from a backend storage.
 ///
 /// This function provides an async interface to the underlying backend's byte retrieval
-/// capabilities. Currently, it works by dispatching blocking I/O operations to Tokio's
-/// thread pool, effectively providing cooperative multitasking while I/O operations
-/// are in progress.
+/// capabilities. Currently, it works by dispatching blocking I/O operations
+/// on a `smol::blocking` thread pool.
 ///
 /// # Implementation Details
 ///
 /// The function tries two strategies in sequence:
 /// 1. First attempts `get_bytes_owned` to obtain ownership of the data
 /// 2. Falls back to `get_bytes` with a copy operation if the backend doesn't support the first method
-///
-/// # Future Possibilities
-///
-/// This abstraction provides a foundation for truly non-blocking I/O in the future:
-/// - Linux: Direct integration with io_uring for zero-copy async file operations
-/// - Windows: IOCP (I/O Completion Ports) based backend implementation
-/// - Cloud storage: Native async HTTP range requests to object storage
 async fn get_bytes_async<Backend: OmFileReaderBackend + Send + Sync + 'static>(
     backend: &Arc<Backend>,
     offset: u64,
     count: u64,
 ) -> Result<Vec<u8>, OmFilesRsError> {
     // Try get_bytes_owned first in a blocking task
-    match tokio::task::spawn_blocking({
+    match unblock({
         let backend = backend.clone();
         move || backend.get_bytes_owned(offset, count)
     })
     .await
     {
-        Ok(Ok(data)) => Ok(data),
-        Ok(Err(error)) => {
+        Ok(data) => Ok(data),
+        Err(error) => {
             // If get_bytes_owned failed with NotImplementedError, try get_bytes as fallback
             match error {
                 OmFilesRsError::NotImplementedError(_) => {
                     // Get bytes directly using get_bytes
                     // This must run in a blocking task since get_bytes returns a reference
                     // We need to copy the data to return an owned Vec<u8>
-                    tokio::task::spawn_blocking({
+                    unblock({
                         let backend = backend.clone();
                         move || backend.get_bytes(offset, count).map(|bytes| bytes.to_vec())
                     })
                     .await
-                    .map_err(|e| OmFilesRsError::TaskError(format!("{}", e)))?
                 }
                 _ => Err(error), // Return original error if it's not NotImplementedError
             }
         }
-        Err(e) => Err(OmFilesRsError::TaskError(format!("{}", e))),
     }
 }
 
@@ -393,7 +407,7 @@ impl<T: OmFileArrayDataType + Send + Sync + 'static> ChunkDecodeTask<T> {
         };
 
         // Decode the chunk in a blocking task
-        tokio::task::spawn_blocking(move || {
+        unblock(move || {
             self.decoder.decode_chunk(
                 self.chunk_index,
                 &self.data_bytes,
@@ -402,6 +416,5 @@ impl<T: OmFileArrayDataType + Send + Sync + 'static> ChunkDecodeTask<T> {
             )
         })
         .await
-        .map_err(|e| OmFilesRsError::TaskError(format!("{}", e)))?
     }
 }

@@ -18,13 +18,10 @@ use om_file_format_sys::{
 };
 use std::collections::HashMap;
 use std::fs::File;
-use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::ops::Range;
 use std::os::raw::c_void;
 use std::sync::Arc;
-
-const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(8).unwrap();
 
 /// A wrapper around the raw C pointer OmVariable_t
 /// marked as Send + Sync.
@@ -61,8 +58,6 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub variable_data: Vec<u8>,
     /// Opaque pointer to the variable defined by header/trailer
     pub(crate) variable: OmVariablePtr,
-    /// Maximum number of concurrent tasks for async operations
-    pub(crate) max_concurrency: NonZeroUsize,
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
@@ -132,7 +127,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             backend,
             variable_data,
             variable: OmVariablePtr(variable_ptr),
-            max_concurrency: MAX_CONCURRENCY,
         })
     }
 
@@ -269,7 +263,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             backend: self.backend.clone(),
             variable_data: child_variable,
             variable: OmVariablePtr(child_variable_ptr),
-            max_concurrency: MAX_CONCURRENCY,
         })
     }
 

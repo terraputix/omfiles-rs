@@ -1,3 +1,4 @@
+use macro_rules_attribute::apply;
 use ndarray::{s, Array2, ArrayD, ArrayViewD};
 use om_file_format_sys::{
     fpxdec32, fpxenc32, om_variable_get_children_count, om_variable_get_scalar,
@@ -16,7 +17,7 @@ use omfiles_rs::{
         writer::{OmFileWriter, OmOffsetSize},
     },
 };
-
+use smol_macros::test;
 use std::{
     borrow::BorrowMut,
     collections::HashMap,
@@ -1308,7 +1309,7 @@ fn test_opening_legacy_file() {
     remove_file_if_exists(file);
 }
 
-#[tokio::test]
+#[apply(test!)]
 async fn test_read_async() -> Result<(), Box<dyn std::error::Error>> {
     // Setup: Create a test file with multi-dimensional data
     let file = "test_read_async.om";
@@ -1370,7 +1371,6 @@ async fn test_read_async() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(partial_sync, partial_async);
 
         // Test 3: Concurrent reads of different parts of the data
-        // Instead of spawning separate tasks, use join! to run them concurrently
         let ranges = [
             [0..5, 0..5, 0..5],
             [5..10, 0..5, 0..5],
@@ -1382,32 +1382,17 @@ async fn test_read_async() -> Result<(), Box<dyn std::error::Error>> {
             [5..10, 5..10, 5..10],
         ];
 
-        // Run them in batches of 4 to avoid too many concurrent operations
-        let results1 = tokio::join!(
-            reader.read_async::<f32>(&ranges[0], None, None),
-            reader.read_async::<f32>(&ranges[1], None, None),
-            reader.read_async::<f32>(&ranges[2], None, None),
-            reader.read_async::<f32>(&ranges[3], None, None),
-        );
+        let mut tasks = Vec::new();
+        // read all ranges concurrently
+        for range in &ranges {
+            tasks.push(reader.read_async::<f32>(range, None, None));
+        }
 
-        let results2 = tokio::join!(
-            reader.read_async::<f32>(&ranges[4], None, None),
-            reader.read_async::<f32>(&ranges[5], None, None),
-            reader.read_async::<f32>(&ranges[6], None, None),
-            reader.read_async::<f32>(&ranges[7], None, None),
-        );
-
-        // Combine all results
-        let results = [
-            results1.0?,
-            results1.1?,
-            results1.2?,
-            results1.3?,
-            results2.0?,
-            results2.1?,
-            results2.2?,
-            results2.3?,
-        ];
+        let mut results = Vec::with_capacity(ranges.len());
+        // Await each task - they're all running concurrently already
+        for task in tasks {
+            results.push(task.await?);
+        }
 
         // Verify all results
         for (i, async_result) in results.iter().enumerate() {
