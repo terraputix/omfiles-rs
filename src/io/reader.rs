@@ -1,20 +1,19 @@
 #![allow(non_snake_case)]
 use crate::backend::backends::{OmFileReaderBackend, OmFileReaderBackendAsync};
 use crate::backend::mmapfile::{MmapFile, Mode};
-use crate::core::c_defaults::{c_error_string, create_uninit_decoder};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
+use crate::core::wrapped_decoder::DecoderWrapper;
 use crate::errors::OmFilesRsError;
 use crate::io::writer::OmOffsetSize;
 use ndarray::ArrayD;
 use num_traits::Zero;
 use om_file_format_sys::{
-    om_decoder_init, om_decoder_read_buffer_size, om_header_size, om_header_type, om_trailer_read,
-    om_trailer_size, om_variable_get_add_offset, om_variable_get_children,
-    om_variable_get_children_count, om_variable_get_chunks, om_variable_get_compression,
-    om_variable_get_dimensions, om_variable_get_name, om_variable_get_scalar,
-    om_variable_get_scale_factor, om_variable_get_type, om_variable_init, OmError_t,
-    OmHeaderType_t, OmVariable_t,
+    om_header_size, om_header_type, om_trailer_read, om_trailer_size, om_variable_get_add_offset,
+    om_variable_get_children, om_variable_get_children_count, om_variable_get_chunks,
+    om_variable_get_compression, om_variable_get_dimensions, om_variable_get_name,
+    om_variable_get_scalar, om_variable_get_scale_factor, om_variable_get_type, om_variable_init,
+    OmError_t, OmHeaderType_t, OmVariable_t,
 };
 use std::collections::HashMap;
 use std::fs::File;
@@ -325,33 +324,23 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
 
         // Initialize decoder
-        let mut decoder = unsafe { create_uninit_decoder() };
-        let error = unsafe {
-            om_decoder_init(
-                &mut decoder,
-                *self.variable,
-                n_dimensions_read as u64,
-                read_offset.as_ptr(),
-                read_count.as_ptr(),
-                into_cube_offset.as_ptr(),
-                into_cube_dimension.as_ptr(),
-                io_size_merge,
-                io_size_max,
-            )
-        };
-
-        if error != OmError_t::ERROR_OK {
-            let error_string = c_error_string(error);
-            return Err(OmFilesRsError::DecoderError(error_string));
-        }
+        let decoder = DecoderWrapper::new(
+            self.variable,
+            n_dimensions_read as u64,
+            &read_offset,
+            &read_count,
+            into_cube_offset,
+            into_cube_dimension,
+            io_size_merge,
+            io_size_max,
+        )?;
 
         // Allocate chunk buffer
-        let chunk_buffer_size = unsafe { om_decoder_read_buffer_size(&decoder) };
-        let mut chunk_buffer = Vec::<u8>::with_capacity(chunk_buffer_size as usize);
+        let mut chunk_buffer = Vec::<u8>::with_capacity(decoder.buffer_size() as usize);
 
         // Perform decoding
         self.backend
-            .decode(&decoder, into, chunk_buffer.as_mut_slice())?;
+            .decode(&decoder.decoder, into, chunk_buffer.as_mut_slice())?;
 
         Ok(())
     }
