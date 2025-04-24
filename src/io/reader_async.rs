@@ -9,7 +9,6 @@ use async_lock::Semaphore;
 use ndarray::ArrayD;
 use num_traits::Zero;
 use om_file_format_sys::OmRange_t;
-use std::cell::UnsafeCell;
 use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::sync::{Arc, OnceLock};
@@ -34,10 +33,10 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Bac
         let out_dims: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
         let out_dims_usize = out_dims.iter().map(|&x| x as usize).collect::<Vec<_>>();
 
-        let out = Arc::new(SharedArray::new(ArrayD::<T>::zeros(out_dims_usize)));
+        let mut out = ArrayD::<T>::zeros(out_dims_usize);
 
         self.read_into_async::<T>(
-            out.clone(),
+            &mut out,
             dim_read,
             &vec![0; dim_read.len()],
             &out_dims,
@@ -46,14 +45,13 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Bac
         )
         .await?;
 
-        let out = Arc::into_inner(out).expect("Failed to unwrap Arc");
-        Ok(out.into_inner())
+        Ok(out)
     }
 
     /// Read into an existing array asynchronously with concurrent processing
     pub async fn read_into_async<T: OmFileArrayDataType + Send + Sync + 'static>(
         &self,
-        into: Arc<SharedArray<T>>,
+        into: &mut ArrayD<T>,
         dim_read: &[Range<u64>],
         into_cube_offset: &[u64],
         into_cube_dimension: &[u64],
@@ -167,8 +165,7 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Bac
             // SAFETY: The decoder is supposed to write into disjoint slices
             // of the output array, so this is not racy!
             let output_bytes = unsafe {
-                let array = &mut *into.inner.get();
-                let output_slice = array
+                let output_slice = into
                     .as_slice_mut()
                     .ok_or(OmFilesRsError::ArrayNotContiguous)?;
 
@@ -193,33 +190,5 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Bac
         }
 
         Ok(())
-    }
-}
-
-/// A wrapper around ArrayD that allows concurrent access to disjoint regions
-///
-/// # Safety
-///
-/// This type allows multiple tasks to access different parts of the same array simultaneously,
-/// which is not normally allowed in Rust. It is safe because:
-///
-/// 1. The OM decoder guarantees that each chunk writes to a disjoint region of the output array
-/// 2. We never allow direct mutable access to the array from multiple threads
-/// 3. All modifications happen through the C decoder which respects the boundaries
-pub struct SharedArray<T> {
-    inner: UnsafeCell<ArrayD<T>>,
-}
-
-unsafe impl<T: Send> Sync for SharedArray<T> {}
-
-impl<T> SharedArray<T> {
-    fn new(array: ArrayD<T>) -> Self {
-        Self {
-            inner: UnsafeCell::new(array),
-        }
-    }
-
-    fn into_inner(self) -> ArrayD<T> {
-        self.inner.into_inner()
     }
 }
