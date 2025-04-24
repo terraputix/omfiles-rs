@@ -1,14 +1,13 @@
 #![allow(non_snake_case)]
-use crate::backend::backends::OmFileReaderBackend;
+use crate::backend::backends::OmFileReaderBackendAsync;
 use crate::core::c_defaults::{
     c_error_string, create_uninit_decoder, new_data_read, new_index_read,
 };
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
 use crate::io::reader::{OmFileReader, OmVariablePtr};
-use async_executor::Executor;
+use async_executor::{Executor, Task};
 use async_lock::Semaphore;
-use blocking::unblock;
 use ndarray::ArrayD;
 use num_traits::Zero;
 use om_file_format_sys::{
@@ -22,19 +21,16 @@ use std::ops::Range;
 use std::os::raw::c_void;
 use std::sync::{Arc, OnceLock};
 
-/// Executor for asynchronous tasks
-/// TODO: this could potentially be moved to the reader level
-static EXECUTOR: OnceLock<Executor<'static>> = OnceLock::new();
-/// Get the executor for asynchronous tasks
+static EXECUTOR: OnceLock<Executor> = OnceLock::new();
 fn get_executor() -> &'static Executor<'static> {
     EXECUTOR.get_or_init(|| Executor::new())
 }
 
 /// Maximum number of concurrent tasks for async operations
 /// TODO: this could potentially be moved to the reader level
-const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(8).unwrap();
+const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(16).unwrap();
 
-impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend> {
+impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Backend> {
     /// Read a variable asynchronously, using concurrent fetching and decoding
     pub async fn read_async<T: OmFileArrayDataType + Clone + Zero + Send + Sync + 'static>(
         &self,
@@ -108,86 +104,99 @@ impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend>
         // Semaphore to limit concurrency
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENCY.get()));
 
-        // Use a vector to collect task handles
-        let mut tasks = Vec::new();
-
         // Process all index blocks
         let mut index_read = new_index_read(&decoder.decoder);
         while decoder.next_index_read(&mut index_read) {
+            // Acquire permit, limiting concurrency
+            let _permit = semaphore.acquire().await;
             // Fetch index data in a blocking task
-            let index_data = {
-                // Acquire permit, limiting concurrency
-                let _permit = semaphore.acquire().await;
-                get_bytes_async(&self.backend.clone(), index_read.offset, index_read.count).await?
-            };
+            let index_data = self
+                .backend
+                .get_bytes_async(index_read.offset, index_read.count)
+                .await?;
+            drop(_permit);
 
             // Create a collection to store single chunks to process
-            let mut chunk_tasks = Vec::new();
-
+            let mut chunk_infos = Vec::new();
             // Collect tasks from the callback without spawning them
             decoder.process_data_reads(
                 &index_read,
                 &index_data,
                 |offset, count, chunk_index| {
                     // Collect task parameters for later processing
-                    chunk_tasks.push((offset, count, chunk_index));
+                    chunk_infos.push((offset, count, chunk_index));
                     Ok(())
                 },
             )?;
 
-            // Spawn tasks after collecting all parameters
-            for (offset, count, chunk_index) in chunk_tasks {
-                let decoder_clone = decoder.clone();
-                let into_clone = into.clone();
-                let backend_clone = self.backend.clone();
+            let mut task_handles: Vec<Task<Result<(Vec<u8>, OmRange_t), OmFilesRsError>>> =
+                Vec::with_capacity(chunk_infos.len());
+
+            // Spawn a task for each chunk info
+            for (offset, count, chunk_index) in chunk_infos {
+                let backend = self.backend.clone();
                 let semaphore_clone = semaphore.clone();
 
-                tasks.push(get_executor().spawn(async move {
+                let task = get_executor().spawn(async move {
                     // Acquire permit limiting concurrency
                     let permit = semaphore_clone.acquire_arc().await;
-                    let data_bytes = get_bytes_async(&backend_clone, offset, count).await?;
 
-                    // Process the chunk
-                    let result = ChunkDecodeTask {
-                        chunk_index,
-                        data_bytes,
-                        output: into_clone,
-                        decoder: decoder_clone,
-                    }
-                    .process()
-                    .await;
+                    // Fetch data and attach chunk index
+                    let data = backend.get_bytes_async(offset, count).await?;
+                    let result = Ok((data, chunk_index));
 
-                    // Release the permit by dropping it explicitly
+                    // Release permit
                     drop(permit);
 
                     result
-                }));
+                });
+                task_handles.push(task);
             }
-        }
 
-        // Wait for all tasks to complete
-        let mut encountered_error = None;
-
-        // Run the executor with our collected tasks
-        get_executor()
-            .run(async {
-                for task in tasks {
-                    match task.await {
-                        Ok(()) => {} // Task completed successfully
-                        Err(e) => {
-                            // Store first error encountered
-                            if encountered_error.is_none() {
-                                encountered_error = Some(e);
-                            }
+            // Run the executor to process all tasks
+            let mut chunk_data: Vec<(Vec<u8>, OmRange_t)> = Vec::with_capacity(task_handles.len());
+            get_executor()
+                .run(async {
+                    for handle in task_handles {
+                        match handle.await {
+                            Ok(result) => chunk_data.push(result),
+                            Err(e) => return Err(OmFilesRsError::TaskError(e.to_string())),
                         }
                     }
-                }
-            })
-            .await;
+                    Ok::<_, OmFilesRsError>(())
+                })
+                .await?;
 
-        // Return error if any occurred
-        if let Some(e) = encountered_error {
-            return Err(e);
+            // Decode all chunks sequentially.
+            // This could also potentially be parallelized using a thread pool.
+            let mut chunk_buffer = vec![0u8; decoder.buffer_size()];
+            // Get access to the output array
+            // SAFETY: The decoder is supposed to write into disjoint slices
+            // of the output array, so this is not racy!
+            let output_bytes = unsafe {
+                let array = &mut *into.inner.get();
+                let output_slice = array
+                    .as_slice_mut()
+                    .ok_or(OmFilesRsError::ArrayNotContiguous)?;
+
+                std::slice::from_raw_parts_mut(
+                    output_slice.as_mut_ptr() as *mut u8,
+                    output_slice.len() * std::mem::size_of::<T>(),
+                )
+            };
+            let results: Vec<Result<(), OmFilesRsError>> = chunk_data
+                .into_iter()
+                .map(|(data_bytes, chunk_index)| {
+                    decoder.decode_chunk(chunk_index, &data_bytes, output_bytes, &mut chunk_buffer)
+                })
+                .collect();
+
+            // Check for errors
+            for result in results {
+                if let Err(e) = result {
+                    return Err(e);
+                }
+            }
         }
 
         Ok(())
@@ -205,37 +214,52 @@ impl<Backend: OmFileReaderBackend + Send + Sync + 'static> OmFileReader<Backend>
 /// The function tries two strategies in sequence:
 /// 1. First attempts `get_bytes_owned` to obtain ownership of the data
 /// 2. Falls back to `get_bytes` with a copy operation if the backend doesn't support the first method
-async fn get_bytes_async<Backend: OmFileReaderBackend + Send + Sync + 'static>(
-    backend: &Arc<Backend>,
-    offset: u64,
-    count: u64,
-) -> Result<Vec<u8>, OmFilesRsError> {
-    // Try get_bytes_owned first in a blocking task
-    match unblock({
-        let backend = backend.clone();
-        move || backend.get_bytes_owned(offset, count)
-    })
-    .await
-    {
-        Ok(data) => Ok(data),
-        Err(error) => {
-            // If get_bytes_owned failed with NotImplementedError, try get_bytes as fallback
-            match error {
-                OmFilesRsError::NotImplementedError(_) => {
-                    // Get bytes directly using get_bytes
-                    // This must run in a blocking task since get_bytes returns a reference
-                    // We need to copy the data to return an owned Vec<u8>
-                    unblock({
-                        let backend = backend.clone();
-                        move || backend.get_bytes(offset, count).map(|bytes| bytes.to_vec())
-                    })
-                    .await
-                }
-                _ => Err(error), // Return original error if it's not NotImplementedError
-            }
-        }
-    }
-}
+// async fn get_bytes_async<Backend: OmFileReaderBackend + Send + Sync + 'static>(
+//     backend: &Arc<Backend>,
+//     offset: u64,
+//     count: u64,
+// ) -> impl Future<Output = Result<Vec<u8>, OmFilesRsError>> {
+//     return backend.get_bytes_async(offset, count);
+//     // match backend.get_bytes_owned(offset, count) {
+//     //     Ok(data) => return Ok(data),
+//     //     Err(error) => {
+//     //         if matches!(error, OmFilesRsError::NotImplementedError(_)) {
+//     //             // Fallback to get_bytes with copy
+//     //             return backend.get_bytes(offset, count).map(|bytes| bytes.to_vec());
+//     //         }
+//     //         return Err(error);
+//     //     }
+//     // }
+//     // Try get_bytes_owned first in a blocking task
+//     let backend_clone = backend.clone();
+//     let owned_result = unblock(move || backend_clone.get_bytes_owned(offset, count)).await;
+//     println!("get_bytes_owned result: {:?}", owned_result);
+//     return owned_result;
+
+//     // match owned_result {
+//     //     Ok(data) => {
+//     //         println!("get_bytes_owned succeeded");
+//     //         Ok(data)
+//     //     }
+//     //     Err(error) => {
+//     //         println!("get_bytes_owned failed");
+//     //         // If get_bytes_owned failed with NotImplementedError, try get_bytes as fallback
+//     //         match error {
+//     //             OmFilesRsError::NotImplementedError(_) => {
+//     //                 // Get bytes directly using get_bytes
+//     //                 // This must run in a blocking task since get_bytes returns a reference
+//     //                 // We need to copy the data to return an owned Vec<u8>
+//     //                 unblock({
+//     //                     let backend = backend.clone();
+//     //                     move || backend.get_bytes(offset, count).map(|bytes| bytes.to_vec())
+//     //                 })
+//     //                 .await
+//     //             }
+//     //             _ => Err(error), // Return original error if it's not NotImplementedError
+//     //         }
+//     //     }
+//     // }
+// }
 
 struct DecoderWrapper {
     decoder: OmDecoder_t,
@@ -381,40 +405,40 @@ impl<T> SharedArray<T> {
     }
 }
 
-struct ChunkDecodeTask<T: OmFileArrayDataType> {
-    chunk_index: OmRange_t,
-    data_bytes: Vec<u8>,
-    output: Arc<SharedArray<T>>,
-    decoder: Arc<DecoderWrapper>,
-}
+// struct ChunkDecodeTask<T: OmFileArrayDataType> {
+//     chunk_index: OmRange_t,
+//     data_bytes: Vec<u8>,
+//     output: Arc<SharedArray<T>>,
+//     decoder: Arc<DecoderWrapper>,
+// }
 
-impl<T: OmFileArrayDataType + Send + Sync + 'static> ChunkDecodeTask<T> {
-    async fn process(self) -> Result<(), OmFilesRsError> {
-        // Output buffer for decoding, could potentially be fetched from a pool
-        let mut chunk_buffer = vec![0u8; self.decoder.buffer_size()];
+// impl<T: OmFileArrayDataType + Send + Sync + 'static> ChunkDecodeTask<T> {
+//     async fn process(self) -> Result<(), OmFilesRsError> {
+//         // Output buffer for decoding, could potentially be fetched from a pool
+//         let mut chunk_buffer = vec![0u8; self.decoder.buffer_size()];
 
-        // SAFETY: We rely on the C decoder to ensure each chunk writes to disjoint regions
-        let output_bytes = unsafe {
-            let array = &mut *self.output.inner.get();
-            let output_slice = array
-                .as_slice_mut()
-                .ok_or(OmFilesRsError::ArrayNotContiguous)?;
+//         // SAFETY: We rely on the C decoder to ensure each chunk writes to disjoint regions
+//         let output_bytes = unsafe {
+//             let array = &mut *self.output.inner.get();
+//             let output_slice = array
+//                 .as_slice_mut()
+//                 .ok_or(OmFilesRsError::ArrayNotContiguous)?;
 
-            std::slice::from_raw_parts_mut(
-                output_slice.as_mut_ptr() as *mut u8,
-                output_slice.len() * std::mem::size_of::<T>(),
-            )
-        };
+//             std::slice::from_raw_parts_mut(
+//                 output_slice.as_mut_ptr() as *mut u8,
+//                 output_slice.len() * std::mem::size_of::<T>(),
+//             )
+//         };
 
-        // Decode the chunk in a blocking task
-        unblock(move || {
-            self.decoder.decode_chunk(
-                self.chunk_index,
-                &self.data_bytes,
-                output_bytes,
-                &mut chunk_buffer,
-            )
-        })
-        .await
-    }
-}
+//         // Decode the chunk in a blocking task
+//         unblock(move || {
+//             self.decoder.decode_chunk(
+//                 self.chunk_index,
+//                 &self.data_bytes,
+//                 output_bytes,
+//                 &mut chunk_buffer,
+//             )
+//         })
+//         .await
+//     }
+// }

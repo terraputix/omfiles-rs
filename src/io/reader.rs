@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-use crate::backend::backends::OmFileReaderBackend;
+use crate::backend::backends::{OmFileReaderBackend, OmFileReaderBackendAsync};
 use crate::backend::mmapfile::{MmapFile, Mode};
 use crate::core::c_defaults::{c_error_string, create_uninit_decoder};
 use crate::core::compression::CompressionType;
@@ -49,7 +49,8 @@ impl Deref for OmVariablePtr {
     }
 }
 
-pub struct OmFileReader<Backend: OmFileReaderBackend> {
+#[derive(Clone)]
+pub struct OmFileReader<Backend> {
     offset_size: Option<OmOffsetSize>,
     /// The backend that provides data via the get_bytes method
     pub backend: Arc<Backend>,
@@ -58,6 +59,80 @@ pub struct OmFileReader<Backend: OmFileReaderBackend> {
     pub variable_data: Vec<u8>,
     /// Opaque pointer to the variable defined by header/trailer
     pub(crate) variable: OmVariablePtr,
+}
+
+impl<Backend> OmFileReader<Backend> {
+    pub fn data_type(&self) -> DataType {
+        unsafe {
+            DataType::try_from(om_variable_get_type(*self.variable) as u8)
+                .expect("Invalid data type")
+        }
+    }
+
+    pub fn compression(&self) -> CompressionType {
+        unsafe {
+            CompressionType::try_from(om_variable_get_compression(*self.variable) as u8)
+                .expect("Invalid compression type")
+        }
+    }
+
+    pub fn scale_factor(&self) -> f32 {
+        unsafe { om_variable_get_scale_factor(*self.variable) }
+    }
+
+    pub fn add_offset(&self) -> f32 {
+        unsafe { om_variable_get_add_offset(*self.variable) }
+    }
+
+    pub fn get_dimensions(&self) -> &[u64] {
+        unsafe {
+            let dims = om_variable_get_dimensions(*self.variable);
+            std::slice::from_raw_parts(dims.values, dims.count as usize)
+        }
+    }
+
+    pub fn get_chunk_dimensions(&self) -> &[u64] {
+        unsafe {
+            let chunks = om_variable_get_chunks(*self.variable);
+            std::slice::from_raw_parts(chunks.values, chunks.count as usize)
+        }
+    }
+
+    pub fn get_name(&self) -> Option<String> {
+        unsafe {
+            let name = om_variable_get_name(*self.variable);
+            if name.size == 0 {
+                return None;
+            }
+            let bytes = std::slice::from_raw_parts(name.value as *const u8, name.size as usize);
+            String::from_utf8(bytes.to_vec()).ok()
+        }
+    }
+
+    pub fn number_of_children(&self) -> u32 {
+        unsafe { om_variable_get_children_count(*self.variable) }
+    }
+
+    pub fn read_scalar<T: OmFileScalarDataType>(&self) -> Option<T> {
+        if T::DATA_TYPE_SCALAR != self.data_type() {
+            return None;
+        }
+
+        let mut ptr: *mut std::os::raw::c_void = std::ptr::null_mut();
+        let mut size: u64 = 0;
+
+        let error = unsafe { om_variable_get_scalar(*self.variable, &mut ptr, &mut size) };
+
+        if error != OmError_t::ERROR_OK || ptr.is_null() {
+            return None;
+        }
+
+        // Safety: ptr points to a valid memory region of 'size' bytes
+        // that contains data of the expected type
+        let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, size as usize) };
+
+        Some(T::from_raw_bytes(bytes))
+    }
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
@@ -130,53 +205,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         })
     }
 
-    pub fn data_type(&self) -> DataType {
-        unsafe {
-            DataType::try_from(om_variable_get_type(*self.variable) as u8)
-                .expect("Invalid data type")
-        }
-    }
-
-    pub fn compression(&self) -> CompressionType {
-        unsafe {
-            CompressionType::try_from(om_variable_get_compression(*self.variable) as u8)
-                .expect("Invalid compression type")
-        }
-    }
-
-    pub fn scale_factor(&self) -> f32 {
-        unsafe { om_variable_get_scale_factor(*self.variable) }
-    }
-
-    pub fn add_offset(&self) -> f32 {
-        unsafe { om_variable_get_add_offset(*self.variable) }
-    }
-
-    pub fn get_dimensions(&self) -> &[u64] {
-        unsafe {
-            let dims = om_variable_get_dimensions(*self.variable);
-            std::slice::from_raw_parts(dims.values, dims.count as usize)
-        }
-    }
-
-    pub fn get_chunk_dimensions(&self) -> &[u64] {
-        unsafe {
-            let chunks = om_variable_get_chunks(*self.variable);
-            std::slice::from_raw_parts(chunks.values, chunks.count as usize)
-        }
-    }
-
-    pub fn get_name(&self) -> Option<String> {
-        unsafe {
-            let name = om_variable_get_name(*self.variable);
-            if name.size == 0 {
-                return None;
-            }
-            let bytes = std::slice::from_raw_parts(name.value as *const u8, name.size as usize);
-            String::from_utf8(bytes.to_vec()).ok()
-        }
-    }
-
     /// Returns a HashMap mapping variable names to their offset and size
     /// This function needs to traverse the entire variable tree, therefore
     /// it is best to make sure that variable metadata is close to each other
@@ -220,10 +248,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         }
     }
 
-    pub fn number_of_children(&self) -> u32 {
-        unsafe { om_variable_get_children_count(*self.variable) }
-    }
-
     pub fn get_child(&self, index: u32) -> Option<Self> {
         let mut offset = 0u64;
         let mut size = 0u64;
@@ -264,27 +288,6 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
             variable_data: child_variable,
             variable: OmVariablePtr(child_variable_ptr),
         })
-    }
-
-    pub fn read_scalar<T: OmFileScalarDataType>(&self) -> Option<T> {
-        if T::DATA_TYPE_SCALAR != self.data_type() {
-            return None;
-        }
-
-        let mut ptr: *mut std::os::raw::c_void = std::ptr::null_mut();
-        let mut size: u64 = 0;
-
-        let error = unsafe { om_variable_get_scalar(*self.variable, &mut ptr, &mut size) };
-
-        if error != OmError_t::ERROR_OK || ptr.is_null() {
-            return None;
-        }
-
-        // Safety: ptr points to a valid memory region of 'size' bytes
-        // that contains data of the expected type
-        let bytes = unsafe { std::slice::from_raw_parts(ptr as *const u8, size as usize) };
-
-        Some(T::from_raw_bytes(bytes))
     }
 
     /// Read a variable as an array of a dynamic data type.
@@ -348,7 +351,7 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
 
         // Perform decoding
         self.backend
-            .decode(&mut decoder, into, chunk_buffer.as_mut_slice())?;
+            .decode(&decoder, into, chunk_buffer.as_mut_slice())?;
 
         Ok(())
     }
@@ -399,5 +402,59 @@ impl OmFileReader<MmapFile> {
     /// Linux keeps the file alive as long as some processes have it open.
     pub fn was_deleted(&self) -> bool {
         self.backend.was_deleted()
+    }
+}
+
+impl<Backend: OmFileReaderBackendAsync> OmFileReader<Backend> {
+    pub async fn async_new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
+        let header_size = unsafe { om_header_size() };
+        if backend.count_async() < header_size {
+            return Err(OmFilesRsError::FileTooSmall);
+        }
+        let header_size = header_size as u64;
+        let header_data = backend.get_bytes_async(0, header_size).await?;
+
+        let header_type = unsafe { om_header_type(header_data.as_ptr() as *const c_void) };
+
+        let variable_and_offset = {
+            match header_type {
+                OmHeaderType_t::OM_HEADER_LEGACY => Ok((header_data, None)),
+                OmHeaderType_t::OM_HEADER_READ_TRAILER => unsafe {
+                    let file_size = backend.count_async();
+                    let trailer_size = om_trailer_size();
+                    let trailer_offset = (file_size - trailer_size) as u64;
+                    let this_trailer = backend
+                        .get_bytes_async(trailer_offset, trailer_size as u64)
+                        .await?;
+                    let mut offset = 0u64;
+                    let mut size = 0u64;
+                    if !om_trailer_read(
+                        this_trailer.as_ptr() as *const c_void,
+                        &mut offset,
+                        &mut size,
+                    ) {
+                        return Err(OmFilesRsError::NotAnOmFile);
+                    }
+
+                    let offset_size = OmOffsetSize::new(offset, size);
+
+                    let variable_data = backend.get_bytes_async(offset, size).await?;
+                    Ok((variable_data, Some(offset_size)))
+                },
+                OmHeaderType_t::OM_HEADER_INVALID => {
+                    return Err(OmFilesRsError::NotAnOmFile);
+                }
+            }
+        };
+
+        let (variable_data, offset_size) = variable_and_offset?;
+
+        let variable_ptr = unsafe { om_variable_init(variable_data.as_ptr() as *const c_void) };
+        Ok(Self {
+            offset_size,
+            backend,
+            variable_data,
+            variable: OmVariablePtr(variable_ptr),
+        })
     }
 }

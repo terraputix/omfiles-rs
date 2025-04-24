@@ -33,7 +33,6 @@ num-traits = "0.2.14"
 thiserror = "2.0.12"
 async-lock = "3.4.0"
 async-executor = "1.13.1"
-blocking = "1.6.1"
 
 [dev-dependencies]
 criterion = "0.5.1"

@@ -8,6 +8,7 @@ use om_file_format_sys::{
     OmError_t,
 };
 use std::fs::File;
+use std::future::Future;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::raw::c_void;
 
@@ -63,10 +64,10 @@ pub trait OmFileReaderBackend: Send + Sync {
         into: &mut ArrayD<OmType>,
         chunk_buffer: &mut [u8],
     ) -> Result<(), OmFilesRsError> {
-        #[allow(unused_mut)]
-        let mut into = into
+        let into_ptr = into
             .as_slice_mut()
-            .ok_or(OmFilesRsError::ArrayNotContiguous)?;
+            .ok_or(OmFilesRsError::ArrayNotContiguous)?
+            .as_mut_ptr();
 
         let mut index_read = new_index_read(decoder);
         unsafe {
@@ -107,7 +108,7 @@ pub trait OmFileReaderBackend: Send + Sync {
                         data_read.chunkIndex,
                         data_data.as_ptr() as *const c_void,
                         data_read.count,
-                        into.as_mut_ptr() as *mut c_void,
+                        into_ptr as *mut c_void,
                         chunk_buffer.as_mut_ptr() as *mut c_void,
                         &mut error,
                     ) {
@@ -123,6 +124,17 @@ pub trait OmFileReaderBackend: Send + Sync {
         }
         Ok(())
     }
+}
+
+pub trait OmFileReaderBackendAsync: Send + Sync {
+    /// Length in bytes
+    fn count_async(&self) -> usize;
+
+    fn get_bytes_async(
+        &self,
+        _offset: u64,
+        _count: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, OmFilesRsError>> + Send;
 }
 
 fn map_io_error(e: std::io::Error) -> OmFilesRsError {
@@ -194,6 +206,17 @@ impl OmFileReaderBackend for MmapFile {
             MmapType::ReadOnly(ref mmap) => Ok(&mmap[index_range]),
             MmapType::ReadWrite(ref mmap_mut) => Ok(&mmap_mut[index_range]),
         }
+    }
+}
+
+impl OmFileReaderBackendAsync for MmapFile {
+    fn count_async(&self) -> usize {
+        self.data.len()
+    }
+
+    async fn get_bytes_async(&self, offset: u64, count: u64) -> Result<Vec<u8>, OmFilesRsError> {
+        let data = self.get_bytes(offset, count);
+        Ok(data?.to_vec())
     }
 }
 
