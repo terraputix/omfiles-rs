@@ -108,7 +108,7 @@ impl<Backend> OmFileReader<Backend> {
     }
 
     /// Shared initialization from variable data
-    pub(crate) fn init_from_variable_data(
+    fn init_from_variable_data(
         backend: Arc<Backend>,
         variable_data: Vec<u8>,
         offset_size: Option<OmOffsetSize>,
@@ -123,9 +123,7 @@ impl<Backend> OmFileReader<Backend> {
     }
 
     /// Helper to process trailer data
-    pub(crate) unsafe fn process_trailer(
-        trailer_data: &[u8],
-    ) -> Result<(u64, u64), OmFilesRsError> {
+    unsafe fn process_trailer(trailer_data: &[u8]) -> Result<(u64, u64), OmFilesRsError> {
         let mut offset = 0u64;
         let mut size = 0u64;
         if !om_trailer_read(
@@ -138,10 +136,55 @@ impl<Backend> OmFileReader<Backend> {
 
         Ok((offset, size))
     }
+
+    pub(crate) fn prepare_read_parameters<T: OmFileArrayDataType>(
+        &self,
+        dim_read: &[Range<u64>],
+        into_cube_offset: &[u64],
+        into_cube_dimension: &[u64],
+        io_size_max: Option<u64>,
+        io_size_merge: Option<u64>,
+    ) -> Result<DecoderWrapper, OmFilesRsError> {
+        let io_size_max = io_size_max.unwrap_or(65536);
+        let io_size_merge = io_size_merge.unwrap_or(512);
+
+        // Verify data type
+        if T::DATA_TYPE_ARRAY != self.data_type() {
+            return Err(OmFilesRsError::InvalidDataType);
+        }
+
+        let n_dimensions_read = dim_read.len();
+        let n_dims = self.get_dimensions().len();
+
+        // Validate dimension counts
+        if n_dims != n_dimensions_read
+            || n_dimensions_read != into_cube_offset.len()
+            || n_dimensions_read != into_cube_dimension.len()
+        {
+            return Err(OmFilesRsError::MismatchingCubeDimensionLength);
+        }
+
+        // Prepare read parameters
+        let read_offset: Vec<u64> = dim_read.iter().map(|r| r.start).collect();
+        let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
+
+        // Initialize decoder
+        let decoder = DecoderWrapper::new(
+            self.variable,
+            n_dimensions_read as u64,
+            read_offset,
+            read_count,
+            into_cube_offset,
+            into_cube_dimension,
+            io_size_merge,
+            io_size_max,
+        )?;
+
+        Ok(decoder)
+    }
 }
 
 impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
-    #[allow(non_upper_case_globals)]
     pub fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() };
         if backend.count() < header_size {
@@ -156,9 +199,10 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
                 OmHeaderType_t::OM_HEADER_READ_TRAILER => {
                     let file_size = backend.count();
                     let trailer_size = unsafe { om_trailer_size() };
-                    let trailer_offset = (file_size - trailer_size) as u64;
-                    let trailer_data =
-                        backend.get_bytes_with_fallback(trailer_offset, trailer_size as u64)?;
+                    let trailer_data = backend.get_bytes_with_fallback(
+                        (file_size - trailer_size) as u64,
+                        trailer_size as u64,
+                    )?;
 
                     let (offset, size) = unsafe { Self::process_trailer(&trailer_data) }?;
 
@@ -236,18 +280,10 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         &self,
         offset_size: OmOffsetSize,
     ) -> Result<Self, OmFilesRsError> {
-        let owned_data: Result<Vec<u8>, OmFilesRsError> = self
+        let child_variable = self
             .backend
-            .get_bytes_owned(offset_size.offset, offset_size.size);
-        let child_variable = match owned_data {
-            Ok(data) => data,
-            Err(error) => {
-                let fallback_result = self.backend.forward_unimplemented_error(error, || {
-                    self.backend.get_bytes(offset_size.offset, offset_size.size)
-                })?;
-                fallback_result.to_vec()
-            }
-        };
+            .get_bytes_with_fallback(offset_size.offset, offset_size.size)?
+            .into_owned();
 
         let child_variable_ptr =
             unsafe { om_variable_init(child_variable.as_ptr() as *const c_void) };
@@ -270,40 +306,12 @@ impl<Backend: OmFileReaderBackend> OmFileReader<Backend> {
         io_size_max: Option<u64>,
         io_size_merge: Option<u64>,
     ) -> Result<(), OmFilesRsError> {
-        let io_size_max = io_size_max.unwrap_or(65536);
-        let io_size_merge = io_size_merge.unwrap_or(512);
-
-        // Verify data type
-        if T::DATA_TYPE_ARRAY != self.data_type() {
-            return Err(OmFilesRsError::InvalidDataType);
-        }
-
-        let n_dimensions_read = dim_read.len();
-        // TODO: Maybe cache this in the reader struct
-        let n_dims = self.get_dimensions().len();
-
-        // Validate dimension counts
-        if n_dims != n_dimensions_read
-            || n_dimensions_read != into_cube_offset.len()
-            || n_dimensions_read != into_cube_dimension.len()
-        {
-            return Err(OmFilesRsError::MismatchingCubeDimensionLength);
-        }
-
-        // Prepare read parameters
-        let read_offset: Vec<u64> = dim_read.iter().map(|r| r.start).collect();
-        let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
-
-        // Initialize decoder
-        let decoder = DecoderWrapper::new(
-            self.variable,
-            n_dimensions_read as u64,
-            &read_offset,
-            &read_count,
+        let decoder = self.prepare_read_parameters::<T>(
+            dim_read,
             into_cube_offset,
             into_cube_dimension,
-            io_size_merge,
             io_size_max,
+            io_size_merge,
         )?;
 
         // Allocate chunk buffer
@@ -380,9 +388,8 @@ impl<Backend: OmFileReaderBackendAsync> OmFileReader<Backend> {
                 OmHeaderType_t::OM_HEADER_READ_TRAILER => unsafe {
                     let file_size = backend.count_async();
                     let trailer_size = om_trailer_size();
-                    let trailer_offset = (file_size - trailer_size) as u64;
                     let trailer_data = backend
-                        .get_bytes_async(trailer_offset, trailer_size as u64)
+                        .get_bytes_async((file_size - trailer_size) as u64, trailer_size as u64)
                         .await?;
 
                     let (offset, size) = Self::process_trailer(&trailer_data)?;

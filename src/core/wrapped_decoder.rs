@@ -13,6 +13,12 @@ use super::c_defaults::new_index_read;
 
 pub struct DecoderWrapper {
     pub(crate) decoder: OmDecoder_t,
+    // We need to store the read parameters, so their lifetime
+    // remains valid throughout the use of the decoder
+    #[allow(dead_code)]
+    read_count: Vec<u64>,
+    #[allow(dead_code)]
+    read_offset: Vec<u64>,
 }
 
 unsafe impl Send for DecoderWrapper {}
@@ -23,8 +29,8 @@ impl DecoderWrapper {
     pub(crate) fn new(
         variable: OmVariablePtr,
         dims: u64,
-        read_offset: &[u64],
-        read_count: &[u64],
+        read_offset: Vec<u64>,
+        read_count: Vec<u64>,
         cube_offset: &[u64],
         cube_dim: &[u64],
         io_size_merge: u64,
@@ -50,7 +56,11 @@ impl DecoderWrapper {
             return Err(OmFilesRsError::DecoderError(error_string));
         }
 
-        Ok(Self { decoder })
+        Ok(Self {
+            decoder,
+            read_offset,
+            read_count,
+        })
     }
 
     /// Get the required buffer size for decoding
