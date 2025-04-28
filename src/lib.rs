@@ -10,6 +10,7 @@ pub mod io {
     pub(crate) mod variable;
     #[macro_use]
     pub(crate) mod variable_impl;
+    pub mod wrapped_decoder;
     pub mod writer;
 }
 
@@ -17,7 +18,6 @@ pub mod core {
     pub mod c_defaults;
     pub mod compression;
     pub mod data_types;
-    pub mod wrapped_decoder;
 }
 
 pub mod backend {

@@ -3,6 +3,8 @@ use crate::backend::mmapfile::{MmapFile, Mode};
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
 use crate::implement_variable_methods;
+use crate::io::reader_utils::process_trailer;
+use crate::io::variable::OmVariableContainer;
 use crate::io::writer::OmOffsetSize;
 use ndarray::ArrayD;
 use num_traits::Zero;
@@ -14,9 +16,6 @@ use std::fs::File;
 use std::ops::Range;
 use std::os::raw::c_void;
 use std::sync::Arc;
-
-use super::reader_utils::process_trailer;
-use super::variable::OmVariableContainer;
 
 pub struct OmFileReader<Backend> {
     /// The backend that provides data via the get_bytes method

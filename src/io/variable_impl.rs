@@ -110,7 +110,7 @@ macro_rules! implement_variable_methods {
                 into_cube_dimension: &[u64],
                 io_size_max: Option<u64>,
                 io_size_merge: Option<u64>,
-            ) -> Result<crate::core::wrapped_decoder::WrappedDecoder, OmFilesRsError> {
+            ) -> Result<crate::io::wrapped_decoder::WrappedDecoder, OmFilesRsError> {
                 let io_size_max = io_size_max.unwrap_or(65536);
                 let io_size_merge = io_size_merge.unwrap_or(512);
 
@@ -135,7 +135,7 @@ macro_rules! implement_variable_methods {
                 let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
 
                 // Initialize decoder
-                let decoder = crate::core::wrapped_decoder::WrappedDecoder::new(
+                let decoder = crate::io::wrapped_decoder::WrappedDecoder::new(
                     self.variable.variable,
                     n_dimensions_read as u64,
                     read_offset,
