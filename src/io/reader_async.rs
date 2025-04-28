@@ -48,7 +48,7 @@ pub struct OmFileReaderAsync<Backend> {
     /// Container for variable metadata and raw data
     variable: OmVariableContainer,
     /// Maximum number of concurrent data fetching operations
-    max_concurrency: NonZeroUsize,
+    semaphore: Arc<Semaphore>,
 }
 
 // implement utility methods for OmFileReaderAsync
@@ -102,7 +102,7 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
         Ok(Self {
             backend,
             variable: OmVariableContainer::new(variable_data, offset_size),
-            max_concurrency: NonZeroUsize::new(16).unwrap(),
+            semaphore: Arc::new(Semaphore::new(16)),
         })
     }
 
@@ -110,7 +110,7 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
     /// # Parameters
     /// - `max_concurrency`: The maximum number of concurrent operations (must be > 0)
     pub fn set_max_concurrency(&mut self, max_concurrency: NonZeroUsize) {
-        self.max_concurrency = max_concurrency;
+        self.semaphore = Arc::new(Semaphore::new(max_concurrency.get()));
     }
 
     /// Reads a multi-dimensional array from the file asynchronously.
@@ -189,14 +189,11 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
             io_size_merge,
         )?;
 
-        // Semaphore to limit concurrency
-        let semaphore = Arc::new(Semaphore::new(self.max_concurrency.get()));
-
         // Process all index blocks
         let mut index_read = decoder.new_index_read();
         while decoder.next_index_read(&mut index_read) {
             // Acquire permit, limiting concurrency
-            let _permit = semaphore.acquire().await;
+            let _permit = self.semaphore.acquire().await;
             // Fetch index data in a blocking task
             let index_data = self
                 .backend
@@ -223,7 +220,7 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
             // Spawn a task for each chunk info
             for (offset, count, chunk_index) in chunk_infos {
                 let backend = self.backend.clone();
-                let semaphore_clone = semaphore.clone();
+                let semaphore_clone = self.semaphore.clone();
 
                 let task = get_executor().spawn(async move {
                     // Acquire permit limiting concurrency
