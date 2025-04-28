@@ -22,13 +22,10 @@ fn get_executor() -> &'static Executor<'static> {
     EXECUTOR.get_or_init(|| Executor::new())
 }
 
-/// Maximum number of concurrent tasks for async operations
-/// TODO: this could potentially be moved to the reader level
-const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(16).unwrap();
-
 pub struct OmFileReaderAsync<Backend> {
     pub backend: Arc<Backend>,
     variable: OmVariableContainer,
+    max_concurrency: NonZeroUsize,
 }
 
 // implement utility methods for OmFileReaderAsync
@@ -68,10 +65,16 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
         Ok(Self {
             backend,
             variable: OmVariableContainer::new(variable_data, offset_size),
+            max_concurrency: NonZeroUsize::new(16).unwrap(),
         })
     }
 
-    /// Read a variable asynchronously, using concurrent fetching and decoding
+    pub fn set_max_concurrency(&mut self, max_concurrency: NonZeroUsize) {
+        self.max_concurrency = max_concurrency;
+    }
+
+    /// Read a variable asynchronously using concurrent fetches
+    /// The decoding is still done sequentially
     pub async fn read<T: OmFileArrayDataType + Clone + Zero + Send + Sync + 'static>(
         &self,
         dim_read: &[Range<u64>],
@@ -96,7 +99,8 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
         Ok(out)
     }
 
-    /// Read into an existing array asynchronously with concurrent processing
+    /// Read into an existing array asynchronously using concurrent fetches
+    /// The decoding is still done sequentially
     pub async fn read_into<T: OmFileArrayDataType + Send + Sync + 'static>(
         &self,
         into: &mut ArrayD<T>,
@@ -115,7 +119,7 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
         )?;
 
         // Semaphore to limit concurrency
-        let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENCY.get()));
+        let semaphore = Arc::new(Semaphore::new(self.max_concurrency.get()));
 
         // Process all index blocks
         let mut index_read = decoder.new_index_read();
