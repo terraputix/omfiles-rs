@@ -7,7 +7,9 @@ use om_file_format_sys::{
     om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
     OmError_t,
 };
+use std::borrow::Cow;
 use std::fs::File;
+use std::future::Future;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::raw::c_void;
 
@@ -20,7 +22,7 @@ pub trait OmFileWriterBackend {
 /// A trait for reading byte data from different storage backends.
 /// Provides methods for reading bytes either by reference or as owned data,
 /// as well as functions for prefetching and pre-reading data.
-pub trait OmFileReaderBackend {
+pub trait OmFileReaderBackend: Send + Sync {
     /// Length in bytes
     fn count(&self) -> usize;
     fn needs_prefetch(&self) -> bool;
@@ -43,13 +45,31 @@ pub trait OmFileReaderBackend {
         ))
     }
 
-    fn forward_unimplemented_error<'a, F>(
+    /// Returns a reference to a slice of bytes from the backend, starting at `offset` and reading `count` bytes.
+    /// At least one of `get_bytes` or `get_bytes_owned` must be implemented.
+    ///
+    /// This method is a fallback implementation that uses `get_bytes_owned` if `get_bytes` is not implemented.
+    /// It is using Cow semantics to avoid unnecessary cloning.
+    fn get_bytes_with_fallback<'a>(
+        &'a self,
+        offset: u64,
+        count: u64,
+    ) -> Result<Cow<'a, [u8]>, OmFilesRsError> {
+        match self.get_bytes(offset, count) {
+            Ok(bytes) => Ok(Cow::Borrowed(bytes)),
+            Err(e) => Ok(Cow::Owned(self.forward_unimplemented_error(e, || {
+                self.get_bytes_owned(offset, count)
+            })?)),
+        }
+    }
+
+    fn forward_unimplemented_error<'a, F, T>(
         &'a self,
         e: OmFilesRsError,
         fallback_fn: F,
-    ) -> Result<&'a [u8], OmFilesRsError>
+    ) -> Result<T, OmFilesRsError>
     where
-        F: FnOnce() -> Result<&'a [u8], OmFilesRsError>,
+        F: FnOnce() -> Result<T, OmFilesRsError>,
     {
         match e {
             OmFilesRsError::NotImplementedError(_) => fallback_fn(),
@@ -63,23 +83,17 @@ pub trait OmFileReaderBackend {
         into: &mut ArrayD<OmType>,
         chunk_buffer: &mut [u8],
     ) -> Result<(), OmFilesRsError> {
-        #[allow(unused_mut)]
-        let mut into = into
+        let into_ptr = into
             .as_slice_mut()
-            .ok_or(OmFilesRsError::ArrayNotContiguous)?;
+            .ok_or(OmFilesRsError::ArrayNotContiguous)?
+            .as_mut_ptr();
 
         let mut index_read = new_index_read(decoder);
         unsafe {
             // Loop over index blocks and read index data
             while om_decoder_next_index_read(decoder, &mut index_read) {
-                // Get bytes for index-read as owned data or as reference
-                let owned_data = self.get_bytes_owned(index_read.offset, index_read.count);
-                let index_data = match owned_data {
-                    Ok(ref data) => data.as_slice(),
-                    Err(error) => self.forward_unimplemented_error(error, || {
-                        self.get_bytes(index_read.offset, index_read.count)
-                    })?,
-                };
+                let index_data =
+                    self.get_bytes_with_fallback(index_read.offset, index_read.count)?;
 
                 let mut data_read = new_data_read(&index_read);
 
@@ -93,21 +107,15 @@ pub trait OmFileReaderBackend {
                     index_read.count,
                     &mut error,
                 ) {
-                    // Get bytes for data-read as owned data or as reference
-                    let owned_data = self.get_bytes_owned(data_read.offset, data_read.count);
-                    let data_data = match owned_data {
-                        Ok(ref data) => data.as_slice(),
-                        Err(error) => self.forward_unimplemented_error(error, || {
-                            self.get_bytes(data_read.offset, data_read.count)
-                        })?,
-                    };
+                    let data_data =
+                        self.get_bytes_with_fallback(data_read.offset, data_read.count)?;
 
                     if !om_decoder_decode_chunks(
                         decoder,
                         data_read.chunkIndex,
                         data_data.as_ptr() as *const c_void,
                         data_read.count,
-                        into.as_mut_ptr() as *mut c_void,
+                        into_ptr as *mut c_void,
                         chunk_buffer.as_mut_ptr() as *mut c_void,
                         &mut error,
                     ) {
@@ -123,6 +131,17 @@ pub trait OmFileReaderBackend {
         }
         Ok(())
     }
+}
+
+pub trait OmFileReaderBackendAsync: Send + Sync {
+    /// Length in bytes
+    fn count_async(&self) -> usize;
+
+    fn get_bytes_async(
+        &self,
+        _offset: u64,
+        _count: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, OmFilesRsError>> + Send;
 }
 
 fn map_io_error(e: std::io::Error) -> OmFilesRsError {
@@ -194,6 +213,17 @@ impl OmFileReaderBackend for MmapFile {
             MmapType::ReadOnly(ref mmap) => Ok(&mmap[index_range]),
             MmapType::ReadWrite(ref mmap_mut) => Ok(&mmap_mut[index_range]),
         }
+    }
+}
+
+impl OmFileReaderBackendAsync for MmapFile {
+    fn count_async(&self) -> usize {
+        self.data.len()
+    }
+
+    async fn get_bytes_async(&self, offset: u64, count: u64) -> Result<Vec<u8>, OmFilesRsError> {
+        let data = self.get_bytes(offset, count);
+        Ok(data?.to_vec())
     }
 }
 

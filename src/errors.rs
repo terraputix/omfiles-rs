@@ -47,4 +47,6 @@ pub enum OmFilesRsError {
     NotImplementedError(String),
     #[error("Array not contiguous")]
     ArrayNotContiguous,
+    #[error("Task Error: {0}")]
+    TaskError(String),
 }

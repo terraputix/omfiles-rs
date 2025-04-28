@@ -1,3 +1,4 @@
+use macro_rules_attribute::apply;
 use ndarray::{s, Array2, ArrayD, ArrayViewD};
 use om_file_format_sys::{
     fpxdec32, fpxenc32, om_variable_get_children_count, om_variable_get_scalar,
@@ -13,10 +14,11 @@ use omfiles_rs::{
     errors::OmFilesRsError,
     io::{
         reader::OmFileReader,
+        reader_async::OmFileReaderAsync,
         writer::{OmFileWriter, OmOffsetSize},
     },
 };
-
+use smol_macros::test;
 use std::{
     borrow::BorrowMut,
     collections::HashMap,
@@ -1306,6 +1308,79 @@ fn test_opening_legacy_file() {
 
     // Clean up
     remove_file_if_exists(file);
+}
+
+#[apply(test!)]
+async fn test_read_async() -> Result<(), Box<dyn std::error::Error>> {
+    // Setup: Create a test file with multi-dimensional data
+    let file = "test_read_async.om";
+    remove_file_if_exists(file);
+
+    let dims = vec![10, 10, 10]; // 3D data
+    let chunk_dimensions = vec![4, 4, 4];
+    let compression = CompressionType::PforDelta2dInt16;
+    let scale_factor = 1.0;
+    let add_offset = 0.0;
+
+    // Generate test data
+    let data = ArrayD::from_shape_vec(
+        copy_vec_u64_to_vec_usize(&dims),
+        (0..1000).map(|i| i as f32).collect(),
+    )
+    .unwrap();
+
+    // Write the test file
+    {
+        let file_handle = File::create(file)?;
+        let mut file_writer = OmFileWriter::new(&file_handle, 8);
+        let mut writer = file_writer.prepare_array::<f32>(
+            dims.clone(),
+            chunk_dimensions,
+            compression,
+            scale_factor,
+            add_offset,
+        )?;
+
+        writer.write_data(data.view(), None, None)?;
+
+        let variable_meta = writer.finalize();
+        let variable = file_writer.write_array(variable_meta, "data", &[])?;
+        file_writer.write_trailer(variable)?;
+    }
+
+    // Test async read functionality
+    {
+        let file_for_reading = File::open(file)?;
+        let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
+        let async_reader = OmFileReaderAsync::new(Arc::new(read_backend)).await?;
+
+        let async_data = async_reader
+            .read::<f32>(&[0..10, 0..10, 0..10], None, None)
+            .await?;
+
+        assert_eq!(data, async_data);
+
+        // Test 2: Read partial data
+        let partial_async = async_reader
+            .read::<f32>(&[2..5, 3..7, 1..3], None, None)
+            .await?;
+        assert_eq!(data.slice(s![2..5, 3..7, 1..3]).into_dyn(), partial_async);
+
+        // Test 4: Test with different IO size parameters
+        let small_io = async_reader
+            .read::<f32>(&[0..10, 0..10, 0..10], Some(128), Some(32))
+            .await?;
+        let large_io = async_reader
+            .read::<f32>(&[0..10, 0..10, 0..10], Some(65536), Some(1024))
+            .await?;
+
+        assert_eq!(small_io, large_io);
+        assert_eq!(small_io, data);
+    }
+
+    // Clean up
+    remove_file_if_exists(file);
+    Ok(())
 }
 
 fn copy_vec_u64_to_vec_usize(input: &Vec<u64>) -> Vec<usize> {
