@@ -1351,7 +1351,7 @@ async fn test_read_async() -> Result<(), Box<dyn std::error::Error>> {
     {
         let file_for_reading = File::open(file)?;
         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-        let reader = OmFileReader::new(Arc::new(read_backend))?;
+        let reader = OmFileReader::async_new(Arc::new(read_backend)).await?;
 
         // Test 1: Compare sync and async read for the full data
         let sync_data = reader.read::<f32>(&[0..10, 0..10, 0..10], None, None)?;
