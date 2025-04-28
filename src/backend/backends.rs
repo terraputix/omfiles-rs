@@ -7,6 +7,7 @@ use om_file_format_sys::{
     om_decoder_decode_chunks, om_decoder_next_data_read, om_decoder_next_index_read, OmDecoder_t,
     OmError_t,
 };
+use std::borrow::Cow;
 use std::fs::File;
 use std::future::Future;
 use std::io::{Seek, SeekFrom, Write};
@@ -44,13 +45,31 @@ pub trait OmFileReaderBackend: Send + Sync {
         ))
     }
 
-    fn forward_unimplemented_error<'a, F>(
+    /// Returns a reference to a slice of bytes from the backend, starting at `offset` and reading `count` bytes.
+    /// At least one of `get_bytes` or `get_bytes_owned` must be implemented.
+    ///
+    /// This method is a fallback implementation that uses `get_bytes_owned` if `get_bytes` is not implemented.
+    /// It is using Cow semantics to avoid unnecessary cloning.
+    fn get_bytes_with_fallback<'a>(
+        &'a self,
+        offset: u64,
+        count: u64,
+    ) -> Result<Cow<'a, [u8]>, OmFilesRsError> {
+        match self.get_bytes(offset, count) {
+            Ok(bytes) => Ok(Cow::Borrowed(bytes)),
+            Err(e) => Ok(Cow::Owned(self.forward_unimplemented_error(e, || {
+                self.get_bytes_owned(offset, count)
+            })?)),
+        }
+    }
+
+    fn forward_unimplemented_error<'a, F, T>(
         &'a self,
         e: OmFilesRsError,
         fallback_fn: F,
-    ) -> Result<&'a [u8], OmFilesRsError>
+    ) -> Result<T, OmFilesRsError>
     where
-        F: FnOnce() -> Result<&'a [u8], OmFilesRsError>,
+        F: FnOnce() -> Result<T, OmFilesRsError>,
     {
         match e {
             OmFilesRsError::NotImplementedError(_) => fallback_fn(),
@@ -73,14 +92,8 @@ pub trait OmFileReaderBackend: Send + Sync {
         unsafe {
             // Loop over index blocks and read index data
             while om_decoder_next_index_read(decoder, &mut index_read) {
-                // Get bytes for index-read as owned data or as reference
-                let owned_data = self.get_bytes_owned(index_read.offset, index_read.count);
-                let index_data = match owned_data {
-                    Ok(ref data) => data.as_slice(),
-                    Err(error) => self.forward_unimplemented_error(error, || {
-                        self.get_bytes(index_read.offset, index_read.count)
-                    })?,
-                };
+                let index_data =
+                    self.get_bytes_with_fallback(index_read.offset, index_read.count)?;
 
                 let mut data_read = new_data_read(&index_read);
 
@@ -94,14 +107,8 @@ pub trait OmFileReaderBackend: Send + Sync {
                     index_read.count,
                     &mut error,
                 ) {
-                    // Get bytes for data-read as owned data or as reference
-                    let owned_data = self.get_bytes_owned(data_read.offset, data_read.count);
-                    let data_data = match owned_data {
-                        Ok(ref data) => data.as_slice(),
-                        Err(error) => self.forward_unimplemented_error(error, || {
-                            self.get_bytes(data_read.offset, data_read.count)
-                        })?,
-                    };
+                    let data_data =
+                        self.get_bytes_with_fallback(data_read.offset, data_read.count)?;
 
                     if !om_decoder_decode_chunks(
                         decoder,

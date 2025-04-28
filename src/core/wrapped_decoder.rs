@@ -7,7 +7,7 @@ use om_file_format_sys::{
 };
 
 use crate::core::c_defaults::{c_error_string, create_uninit_decoder, new_data_read};
-use crate::{errors::OmFilesRsError, io::reader::OmVariablePtr};
+use crate::{errors::OmFilesRsError, io::variable::OmVariablePtr};
 
 use super::c_defaults::new_index_read;
 

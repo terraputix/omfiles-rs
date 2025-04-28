@@ -6,6 +6,7 @@ pub mod io {
     pub mod buffered_writer;
     pub mod reader;
     pub mod reader_async;
+    pub(crate) mod variable;
     pub mod writer;
 }
 
