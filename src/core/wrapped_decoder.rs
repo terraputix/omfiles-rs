@@ -11,7 +11,10 @@ use crate::{errors::OmFilesRsError, io::variable::OmVariablePtr};
 
 use super::c_defaults::new_index_read;
 
-pub struct DecoderWrapper {
+/// This is wrapping the OmDecoder_t struct to guarantee Send and Sync on it.
+/// This is safe to do, because the underlying C-library does not modify the
+/// const pointers contained within the OmDecoder_t struct.
+pub struct WrappedDecoder {
     pub(crate) decoder: OmDecoder_t,
     // We need to store the read parameters, so their lifetime
     // remains valid throughout the use of the decoder
@@ -21,10 +24,10 @@ pub struct DecoderWrapper {
     read_offset: Vec<u64>,
 }
 
-unsafe impl Send for DecoderWrapper {}
-unsafe impl Sync for DecoderWrapper {}
+unsafe impl Send for WrappedDecoder {}
+unsafe impl Sync for WrappedDecoder {}
 
-impl DecoderWrapper {
+impl WrappedDecoder {
     /// Initialize the decoder with read parameters
     pub(crate) fn new(
         variable: OmVariablePtr,

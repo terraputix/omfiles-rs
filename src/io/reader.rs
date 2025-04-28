@@ -3,7 +3,7 @@ use crate::backend::backends::{OmFileReaderBackend, OmFileReaderBackendAsync};
 use crate::backend::mmapfile::{MmapFile, Mode};
 use crate::core::compression::CompressionType;
 use crate::core::data_types::{DataType, OmFileArrayDataType, OmFileScalarDataType};
-use crate::core::wrapped_decoder::DecoderWrapper;
+use crate::core::wrapped_decoder::WrappedDecoder;
 use crate::errors::OmFilesRsError;
 use crate::io::variable::OmVariablePtr;
 use crate::io::writer::OmOffsetSize;
@@ -144,7 +144,7 @@ impl<Backend> OmFileReader<Backend> {
         into_cube_dimension: &[u64],
         io_size_max: Option<u64>,
         io_size_merge: Option<u64>,
-    ) -> Result<DecoderWrapper, OmFilesRsError> {
+    ) -> Result<WrappedDecoder, OmFilesRsError> {
         let io_size_max = io_size_max.unwrap_or(65536);
         let io_size_merge = io_size_merge.unwrap_or(512);
 
@@ -169,7 +169,7 @@ impl<Backend> OmFileReader<Backend> {
         let read_count: Vec<u64> = dim_read.iter().map(|r| r.end - r.start).collect();
 
         // Initialize decoder
-        let decoder = DecoderWrapper::new(
+        let decoder = WrappedDecoder::new(
             self.variable,
             n_dimensions_read as u64,
             read_offset,
