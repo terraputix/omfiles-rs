@@ -1,16 +1,21 @@
-#![allow(non_snake_case)]
 use crate::backend::backends::OmFileReaderBackendAsync;
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
-use crate::io::reader::OmFileReader;
+use crate::implement_variable_methods;
 use async_executor::{Executor, Task};
 use async_lock::Semaphore;
 use ndarray::ArrayD;
 use num_traits::Zero;
-use om_file_format_sys::OmRange_t;
+use om_file_format_sys::{
+    om_header_size, om_header_type, om_trailer_size, OmHeaderType_t, OmRange_t,
+};
+use std::ffi::c_void;
 use std::num::NonZeroUsize;
 use std::ops::Range;
 use std::sync::{Arc, OnceLock};
+
+use super::reader_utils::process_trailer;
+use super::variable::OmVariableContainer;
 
 static EXECUTOR: OnceLock<Executor> = OnceLock::new();
 fn get_executor() -> &'static Executor<'static> {
@@ -21,9 +26,53 @@ fn get_executor() -> &'static Executor<'static> {
 /// TODO: this could potentially be moved to the reader level
 const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(16).unwrap();
 
-impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Backend> {
+pub struct OmFileReaderAsync<Backend> {
+    backend: Arc<Backend>,
+    variable: OmVariableContainer,
+}
+
+// implement utility methods for OmFileReaderAsync
+implement_variable_methods!(OmFileReaderAsync<Backend>);
+
+impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsync<Backend> {
+    pub async fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
+        let header_size = unsafe { om_header_size() };
+        if backend.count_async() < header_size {
+            return Err(OmFilesRsError::FileTooSmall);
+        }
+        let header_data = backend.get_bytes_async(0, header_size as u64).await?;
+        let header_type = unsafe { om_header_type(header_data.as_ptr() as *const c_void) };
+
+        let (variable_data, offset_size) = {
+            match header_type {
+                OmHeaderType_t::OM_HEADER_LEGACY => (header_data, None),
+                OmHeaderType_t::OM_HEADER_READ_TRAILER => unsafe {
+                    let file_size = backend.count_async();
+                    let trailer_size = om_trailer_size();
+                    let trailer_data = backend
+                        .get_bytes_async((file_size - trailer_size) as u64, trailer_size as u64)
+                        .await?;
+
+                    let offset_size = process_trailer(&trailer_data)?;
+                    let variable_data = backend
+                        .get_bytes_async(offset_size.offset, offset_size.size)
+                        .await?;
+                    (variable_data, Some(offset_size))
+                },
+                OmHeaderType_t::OM_HEADER_INVALID => {
+                    return Err(OmFilesRsError::NotAnOmFile);
+                }
+            }
+        };
+
+        Ok(Self {
+            backend,
+            variable: OmVariableContainer::new(variable_data, offset_size),
+        })
+    }
+
     /// Read a variable asynchronously, using concurrent fetching and decoding
-    pub async fn read_async<T: OmFileArrayDataType + Clone + Zero + Send + Sync + 'static>(
+    pub async fn read<T: OmFileArrayDataType + Clone + Zero + Send + Sync + 'static>(
         &self,
         dim_read: &[Range<u64>],
         io_size_max: Option<u64>,
@@ -34,7 +83,7 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Bac
 
         let mut out = ArrayD::<T>::zeros(out_dims_usize);
 
-        self.read_into_async::<T>(
+        self.read_into::<T>(
             &mut out,
             dim_read,
             &vec![0; dim_read.len()],
@@ -48,7 +97,7 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReader<Bac
     }
 
     /// Read into an existing array asynchronously with concurrent processing
-    pub async fn read_into_async<T: OmFileArrayDataType + Send + Sync + 'static>(
+    pub async fn read_into<T: OmFileArrayDataType + Send + Sync + 'static>(
         &self,
         into: &mut ArrayD<T>,
         dim_read: &[Range<u64>],

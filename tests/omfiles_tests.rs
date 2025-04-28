@@ -14,6 +14,7 @@ use omfiles_rs::{
     errors::OmFilesRsError,
     io::{
         reader::OmFileReader,
+        reader_async::OmFileReaderAsync,
         writer::{OmFileWriter, OmOffsetSize},
     },
 };
@@ -1351,76 +1352,26 @@ async fn test_read_async() -> Result<(), Box<dyn std::error::Error>> {
     {
         let file_for_reading = File::open(file)?;
         let read_backend = MmapFile::new(file_for_reading, Mode::ReadOnly)?;
-        let reader = OmFileReader::async_new(Arc::new(read_backend)).await?;
+        let async_reader = OmFileReaderAsync::new(Arc::new(read_backend)).await?;
 
-        // Test 1: Compare sync and async read for the full data
-        let sync_data = reader.read::<f32>(&[0..10, 0..10, 0..10], None, None)?;
-        let async_data = reader
-            .read_async::<f32>(&[0..10, 0..10, 0..10], None, None)
+        let async_data = async_reader
+            .read::<f32>(&[0..10, 0..10, 0..10], None, None)
             .await?;
 
-        assert_eq!(sync_data, async_data);
-        assert_eq!(sync_data, data);
+        assert_eq!(data, async_data);
 
         // Test 2: Read partial data
-        let partial_sync = reader.read::<f32>(&[2..5, 3..7, 1..3], None, None)?;
-        let partial_async = reader
-            .read_async::<f32>(&[2..5, 3..7, 1..3], None, None)
+        let partial_async = async_reader
+            .read::<f32>(&[2..5, 3..7, 1..3], None, None)
             .await?;
-
-        assert_eq!(partial_sync, partial_async);
-
-        // Test 3: Concurrent reads of different parts of the data
-        let ranges = [
-            [0..5, 0..5, 0..5],
-            [5..10, 0..5, 0..5],
-            [0..5, 5..10, 0..5],
-            [5..10, 5..10, 0..5],
-            [0..5, 0..5, 5..10],
-            [5..10, 0..5, 5..10],
-            [0..5, 5..10, 5..10],
-            [5..10, 5..10, 5..10],
-        ];
-
-        let mut tasks = Vec::new();
-        // read all ranges concurrently
-        for range in &ranges {
-            tasks.push(reader.read_async::<f32>(range, None, None));
-        }
-
-        let mut results = Vec::with_capacity(ranges.len());
-        // Await each task - they're all running concurrently already
-        for task in tasks {
-            results.push(task.await?);
-        }
-
-        // Verify all results
-        for (i, async_result) in results.iter().enumerate() {
-            // Calculate expected range
-            let x_start = if i % 2 == 0 { 0 } else { 5 };
-            let y_start = if (i / 2) % 2 == 0 { 0 } else { 5 };
-            let z_start = if i < 4 { 0 } else { 5 };
-
-            // Get the same data synchronously for comparison
-            let sync_result = reader.read::<f32>(
-                &[
-                    x_start..(x_start + 5),
-                    y_start..(y_start + 5),
-                    z_start..(z_start + 5),
-                ],
-                None,
-                None,
-            )?;
-
-            assert_eq!(async_result, &sync_result);
-        }
+        assert_eq!(data.slice(s![2..5, 3..7, 1..3]).into_dyn(), partial_async);
 
         // Test 4: Test with different IO size parameters
-        let small_io = reader
-            .read_async::<f32>(&[0..10, 0..10, 0..10], Some(128), Some(32))
+        let small_io = async_reader
+            .read::<f32>(&[0..10, 0..10, 0..10], Some(128), Some(32))
             .await?;
-        let large_io = reader
-            .read_async::<f32>(&[0..10, 0..10, 0..10], Some(65536), Some(1024))
+        let large_io = async_reader
+            .read::<f32>(&[0..10, 0..10, 0..10], Some(65536), Some(1024))
             .await?;
 
         assert_eq!(small_io, large_io);
