@@ -1,3 +1,10 @@
+//! Asynchronous reader implementation for the Open-Meteo file format.
+//!
+//! This module provides functionality to read Open-Meteo files asynchronously,
+//! which is particularly useful for I/O-bound operations like:
+//! - Reading large meteorological datasets over the network
+//! - Processing high-resolution climate data with concurrent fetching
+
 use crate::backend::backends::OmFileReaderBackendAsync;
 use crate::core::data_types::OmFileArrayDataType;
 use crate::errors::OmFilesRsError;
@@ -17,14 +24,30 @@ use std::sync::{Arc, OnceLock};
 use super::reader_utils::process_trailer;
 use super::variable::OmVariableContainer;
 
+/// Global executor for handling asynchronous tasks
 static EXECUTOR: OnceLock<Executor> = OnceLock::new();
 fn get_executor() -> &'static Executor<'static> {
     EXECUTOR.get_or_init(|| Executor::new())
 }
 
+/// Asynchronous reader for Open-Meteo file format.
+///
+/// `OmFileReaderAsync` provides optimized access to multi-dimensional weather and climate data
+/// using asynchronous I/O operations. It supports concurrent fetching of data chunks to minimize
+/// I/O latency while maintaining memory efficiency.
+///
+/// # Features
+/// - Concurrent data fetching with configurable parallelism
+/// - Compatible with various backend implementations for different storage types
+///
+/// # Type Parameters
+/// - `Backend`: The storage backend that implements `OmFileReaderBackendAsync`
 pub struct OmFileReaderAsync<Backend> {
+    /// The backend that provides asynchronous data access
     pub backend: Arc<Backend>,
+    /// Container for variable metadata and raw data
     variable: OmVariableContainer,
+    /// Maximum number of concurrent data fetching operations
     max_concurrency: NonZeroUsize,
 }
 
@@ -32,6 +55,20 @@ pub struct OmFileReaderAsync<Backend> {
 implement_variable_methods!(OmFileReaderAsync<Backend>);
 
 impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsync<Backend> {
+    /// Creates a new asynchronous reader for an Open-Meteo file.
+    ///
+    /// This method reads the file header and necessary metadata to initialize the reader.
+    /// It handles both legacy format and trailer-based formats automatically.
+    ///
+    /// # Parameters
+    /// - `backend`: An asynchronous backend that provides access to the file data
+    ///
+    /// # Returns
+    /// - `Result<Self, OmFilesRsError>`: A new reader instance or an error
+    ///
+    /// # Errors
+    /// - `OmFilesRsError::FileTooSmall`: If the file is smaller than the required header size
+    /// - `OmFilesRsError::NotAnOmFile`: If the file doesn't have a valid Open-Meteo format
     pub async fn new(backend: Arc<Backend>) -> Result<Self, OmFilesRsError> {
         let header_size = unsafe { om_header_size() };
         if backend.count_async() < header_size {
@@ -69,12 +106,28 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
         })
     }
 
+    /// Sets the maximum number of concurrent fetch operations.
+    /// # Parameters
+    /// - `max_concurrency`: The maximum number of concurrent operations (must be > 0)
     pub fn set_max_concurrency(&mut self, max_concurrency: NonZeroUsize) {
         self.max_concurrency = max_concurrency;
     }
 
-    /// Read a variable asynchronously using concurrent fetches
-    /// The decoding is still done sequentially
+    /// Reads a multi-dimensional array from the file asynchronously.
+    ///
+    /// This method optimizes I/O by fetching data chunks concurrently, making it
+    /// especially efficient for remote or high-latency storage systems.
+    ///
+    /// # Type Parameters
+    /// - `T`: The data type to read into (e.g., f32, i16)
+    ///
+    /// # Parameters
+    /// - `dim_read`: Specifies which region to read as [start..end] ranges for each dimension
+    /// - `io_size_max`: Optional maximum size of I/O operations in bytes (default: 65536)
+    /// - `io_size_merge`: Optional threshold for merging small I/O operations (default: 512)
+    ///
+    /// # Returns
+    /// - `Result<ArrayD<T>, OmFilesRsError>`: The read data as a multi-dimensional array
     pub async fn read<T: OmFileArrayDataType + Clone + Zero + Send + Sync + 'static>(
         &self,
         dim_read: &[Range<u64>],
@@ -99,8 +152,26 @@ impl<Backend: OmFileReaderBackendAsync + Send + Sync + 'static> OmFileReaderAsyn
         Ok(out)
     }
 
-    /// Read into an existing array asynchronously using concurrent fetches
-    /// The decoding is still done sequentially
+    /// Reads data into an existing array asynchronously.
+    ///
+    /// This advanced method allows reading data into a specific region of an existing array,
+    /// which is useful for tiled processing of large datasets or partial updates.
+    ///
+    /// # Type Parameters
+    /// - `T`: The data type to read (must match the array's data type)
+    ///
+    /// # Parameters
+    /// - `into`: Target array to read the data into
+    /// - `dim_read`: Regions to read from the file as [start..end] ranges
+    /// - `into_cube_offset`: Start position in the target array for each dimension
+    /// - `into_cube_dimension`: Size of the region to fill in the target array
+    /// - `io_size_max`: Optional maximum size of I/O operations (default: 65536)
+    /// - `io_size_merge`: Optional threshold for merging small I/O operations (default: 512)
+    ///
+    /// # Performance Notes
+    /// - Data is fetched concurrently but decoded sequentially
+    /// - The `max_concurrency` setting controls the parallelism level
+    /// - For large files with many small chunks, increasing `io_size_merge` may improve performance
     pub async fn read_into<T: OmFileArrayDataType + Send + Sync + 'static>(
         &self,
         into: &mut ArrayD<T>,
