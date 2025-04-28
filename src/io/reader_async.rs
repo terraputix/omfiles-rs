@@ -27,7 +27,7 @@ fn get_executor() -> &'static Executor<'static> {
 const MAX_CONCURRENCY: NonZeroUsize = NonZeroUsize::new(16).unwrap();
 
 pub struct OmFileReaderAsync<Backend> {
-    backend: Arc<Backend>,
+    pub backend: Arc<Backend>,
     variable: OmVariableContainer,
 }
 
