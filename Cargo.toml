@@ -7,14 +7,6 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[[bin]]
-name = "testread"
-path = "src/bin/testread.rs"
-
-[[bin]]
-name = "reformat"
-path = "src/bin/reformat.rs"
-
 # some optimizations for binary/library size in release builds
 # compare: https://github.com/johnthagen/min-sized-rust
 # [profile.release]
@@ -30,10 +22,15 @@ memmap2 = "0.9.4"
 om-file-format-sys = { git = "https://github.com/open-meteo/om-file-format", rev = "7e362d01f0976416ad4a508e6bbdd74264562797" }
 ndarray = "0.16.0"
 num-traits = "0.2.14"
+thiserror = "2.0.12"
+async-lock = "3.4.0"
+async-executor = "1.13.1"
 
 [dev-dependencies]
 criterion = "0.5.1"
 rand = "0.8"
+smol-macros = "0.1.1"
+macro_rules_attribute = "0.2.0"
 
 [[bench]]
 name = "om_benchmark"
